@@ -20,5 +20,9 @@ it.each([["/privacy", "Privacy policy"], ["/support", "Unravel support"]])("open
   expect(screen.getByRole("heading", { name: heading, level: 1 })).toBeTruthy();
   expect(screen.getByText("App owner: Amos Yang and Faye Yang")).toBeTruthy();
   expect(screen.getByRole("link", { name: "unravelreminders+support@gmail.com" }).getAttribute("href")).toBe("mailto:unravelreminders+support@gmail.com");
+  if (path === "/privacy") {
+    expect(screen.getByRole("link", { name: "Fraunces" }).getAttribute("href")).toBe("/licenses/Fraunces-LICENSE.txt");
+    expect(screen.getByRole("link", { name: "Karla" }).getAttribute("href")).toBe("/licenses/Karla-LICENSE.txt");
+  }
   expect(screen.queryByRole("link", { name: "unravelsupport@gmail.com" })).toBeNull();
 });

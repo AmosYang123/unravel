@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { PRIVACY_SECTIONS } from "@/lib/privacy";
 import SupportContact from "@/components/SupportContact";
-import { FONT_LICENSES } from "../../mobile/lib/font-licenses";
 
 export default function Privacy() {
   return (
@@ -19,7 +18,9 @@ export default function Privacy() {
       <Link to="/support" className="inline-block mt-8 underline">Support</Link>
       <details className="mt-8">
         <summary className="cursor-pointer underline">Font licenses</summary>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{FONT_LICENSES}</p>
+        <p className="mt-3 text-sm leading-relaxed">
+          The complete bundled licenses are available for <a className="underline" href="/licenses/Fraunces-LICENSE.txt">Fraunces</a> and <a className="underline" href="/licenses/Karla-LICENSE.txt">Karla</a>.
+        </p>
       </details>
     </main>
   );

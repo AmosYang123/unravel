@@ -2,7 +2,7 @@
 
 **Status: not ready to submit.** Local fixes are implemented; public contact details, deployment, provider configuration, content rights and a signed-device release test remain unverified. This is an implementation audit, not an Apple approval certificate.
 
-September 12 follow-up: public landing `/`, `/support`, `/privacy`, native public website links and an explicit `npm run release:preflight` check are wired to `mobile/lib/release-config.ts`. Web journal home is now `/journal`; authentication remains required. Operators are **Amos Yang and Faye Yang**, as supplied by the user. Support is **unravelreminders+support@gmail.com**; public URLs remain empty. See [release setup](release-setup.md) and [privacy/content-rights review](privacy-content-rights.md). These changes do not publish the site or verify external readiness.
+September 12 follow-up: public landing `/`, `/support`, `/privacy`, native public website links and an explicit `npm run release:preflight` check are wired to `mobile/lib/release-config.ts`. Web journal home is now `/journal`; authentication remains required. Operators are **Amos Yang and Faye Yang**, as supplied by the user. Support is **unravelreminders+support@gmail.com**. The public site is deployed at **https://officialunravel.vercel.app**. See [release setup](release-setup.md) and [privacy/content-rights review](privacy-content-rights.md). Backend/provider/device readiness remains unverified.
 
 ## Working checklist
 
@@ -15,7 +15,7 @@ Website verification: 92 tests passed, web/mobile TypeScript passed, production 
 - [x] Complete code-based data inventory and provider/content-terms review.
 - [x] Set the user-selected support address: `unravelreminders+support@gmail.com`.
 - [ ] Test receiving and replying to a support email.
-- [ ] Deploy website and record working public HTTPS URLs.
+- [x] Deploy website and verify `/`, `/privacy`, `/support`, and a bundled license over public HTTPS (HTTP 200 on September 12, 2026).
 - [ ] Resolve Gemini API under-18 audience prohibition; current teen-oriented integration is blocked.
 - [ ] Resolve Deezer use permission and Google search result storage rights.
 - [ ] Confirm logo/icon provenance.

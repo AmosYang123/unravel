@@ -1,6 +1,6 @@
 # Finish the release configuration
 
-The code contains a public landing page at `/`, privacy at `/privacy`, and support at `/support`. They work without Supabase environment variables and do not start an account session. The existing web journal is at `/journal`; account routes and password recovery require the Supabase variables. Nothing is published by these changes. Operators are Amos Yang and Faye Yang; support is `unravelreminders+support@gmail.com`. Public URL fields remain empty.
+The public site is deployed at `https://officialunravel.vercel.app`, with privacy at `/privacy` and support at `/support`. Those routes were verified publicly on September 12, 2026. They work without Supabase environment variables and do not start an account session. The existing web journal is at `/journal`; account routes and password recovery require the Supabase variables. Operators are Amos Yang and Faye Yang; support is `unravelreminders+support@gmail.com`.
 
 ## Public contact details
 

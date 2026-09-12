@@ -3,6 +3,6 @@
 export const releaseConfig = {
   ownerName: "Amos Yang and Faye Yang",
   supportEmail: "unravelreminders+support@gmail.com",
-  privacyUrl: "",
-  supportUrl: "",
+  privacyUrl: "https://officialunravel.vercel.app/privacy",
+  supportUrl: "https://officialunravel.vercel.app/support",
 };

@@ -1,0 +1,11 @@
+-- has_role() exists to be called from inside row-level policies and other
+-- security-definer functions. Those run as the owner and never need the grant.
+--
+-- Left executable by `authenticated` it is also reachable over the API at
+-- /rest/v1/rpc/has_role, where any signed-in user can pass somebody else's id
+-- and be told whether that account holds a role — an answer about an account
+-- that is not theirs.
+--
+-- Nothing in either client calls the function: both read public.user_roles
+-- directly, which is covered by its own row-level policy.
+revoke execute on function public.has_role(uuid, public.app_role) from authenticated, anon;

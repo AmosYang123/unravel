@@ -1,0 +1,29 @@
+project_id = "nufocigzmnnnjbmifeoa"
+
+[functions.entry-advice]
+verify_jwt = true
+
+[functions.spotify-songs]
+verify_jwt = true
+
+[functions.transcribe-voice]
+verify_jwt = true
+
+[functions.article-recs]
+verify_jwt = true
+
+[functions.normalize-tag]
+verify_jwt = true
+
+[functions.send-test-reminder]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.dev-control]
+verify_jwt = true
+
+# Called by the scheduler with a shared secret, not a user JWT.
+[functions.send-reminders]
+verify_jwt = false

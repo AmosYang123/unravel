@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email confirmed — Unravel</title>
+    <link rel="icon" href="assets/logo-unravel.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/logo-unravel.png" />
+    <meta
+      name="description"
+      content="Confirm your email for Unravel, a private journal — then head back to the app."
+    />
+    <meta name="theme-color" content="#f7f5f2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Karla:ital,wght@0,300..600;1,300..500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card">
+      <div
+        class="logo"
+        role="img"
+        aria-label="Unravel logo: a ball of yarn with one thread unraveling"
+        style="--logo-mask: url('assets/logo-unravel.png')"
+      ></div>
+
+      <div id="state" data-mood="neutral">
+        <h1 id="heading">Just a moment</h1>
+        <p id="message">Checking your link.</p>
+      </div>
+
+      <div class="actions" id="actions" hidden>
+        <button type="button" class="button button-primary" onclick="openApp()">
+          Open Unravel
+        </button>
+      </div>
+
+      <p class="privacy-note">
+        Unravel is a private journal. Nobody but you can read what you write there — not us, not
+        anyone else.
+      </p>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

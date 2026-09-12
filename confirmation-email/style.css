@@ -1,0 +1,146 @@
+/* Quiet, warm — matches Unravel's "linen" theme. All colors HSL, same
+   palette as src/index.css, with a dark variant close to its "dusk" theme. */
+
+:root {
+  --background: 38 24% 96%;
+  --foreground: 30 10% 18%;
+  --card: 38 30% 98%;
+  --muted-foreground: 30 8% 45%;
+  --accent: 18 32% 62%;
+  --accent-foreground: 30 14% 16%;
+  --destructive: 4 46% 48%;
+  --border: 34 16% 87%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 245 18% 11%;
+    --foreground: 250 14% 90%;
+    --card: 245 16% 14%;
+    --muted-foreground: 248 10% 62%;
+    --accent: 262 34% 66%;
+    --accent-foreground: 245 18% 12%;
+    --destructive: 4 52% 52%;
+    --border: 245 12% 22%;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: "Karla", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+  animation: rise 0.5s ease-out;
+}
+
+.logo {
+  height: 2.75rem;
+  width: auto;
+  aspect-ratio: 459 / 651;
+  background-color: hsl(var(--foreground));
+  -webkit-mask-image: var(--logo-mask);
+  mask-image: var(--logo-mask);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  opacity: 0.9;
+}
+
+h1 {
+  margin: 1.5rem 0 0;
+  font-family: "Fraunces", ui-serif, Georgia, serif;
+  font-weight: 500;
+  font-size: 1.9rem;
+  line-height: 1.25;
+}
+
+p {
+  margin: 0.9rem 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* A quiet mood cue, not a scary red banner. */
+#state[data-mood="gentle"] p {
+  color: hsl(var(--foreground));
+}
+
+.actions {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 3rem;
+  padding: 0 1.5rem;
+  border-radius: 999px;
+  border: none;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.button:hover {
+  opacity: 0.9;
+}
+
+.button-primary {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+.button-secondary {
+  background: transparent;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.privacy-note {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid hsl(var(--border));
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -2,7 +2,7 @@ import { hasSharingConsent } from "../_shared/sharing-consent.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@3";
 
-const MODEL = "gemini-3.6-flash";
+const MODEL = "openai/gpt-oss-20b";
 
 type Plan = { headline: string; encouragement: string; steps: string[] };
 
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Not signed in." }, 401);
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("GROQ_API_KEY");
     if (!apiKey) return json({ error: "AI is not configured." }, 500);
 
     // The user's own token: row-level security decides what they can reach.
@@ -98,52 +98,47 @@ Deno.serve(async (req) => {
     const variation = parsedBody.data.variation ?? 0;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM }] },
-          contents: [
+          model: MODEL,
+          messages: [
+            { role: "system", content: SYSTEM },
             {
               role: "user",
-              parts: [
-                {
-                  text: `Journal entry:\n${summary}\n\nWrite advice and encouragement as JSON.${
+              content: `Journal entry:\n${summary}\n\nWrite advice and encouragement as JSON.${
                     variation > 0
                       ? ` Take a different angle than a previous attempt (variation ${variation}).`
                       : ""
                   }`,
-                },
-              ],
             },
           ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: variation > 0 ? 1.1 : 0.9,
-            thinkingConfig: { thinkingLevel: "low" },
-          },
+          response_format: { type: "json_object" },
+          temperature: variation > 0 ? 1.1 : 0.9,
         }),
       },
     );
 
     if (!res.ok) {
-      console.error(`Gemini API failed [${res.status}]`);
+      console.error(`Groq text API failed [${res.status}]`);
       const message =
         res.status === 429
           ? "Too many requests right now — try again in a moment."
           : res.status === 401 || res.status === 403
-            ? "The Gemini API key was rejected."
+            ? "The Groq API key was rejected."
             : "The AI couldn't answer just now.";
       return json({ error: message, status: res.status }, res.status);
     }
 
     const data = await res.json();
-    const raw =
-      data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p?.text ?? "").join("") ?? "";
+    const raw = typeof data?.choices?.[0]?.message?.content === "string"
+      ? data.choices[0].message.content
+      : "";
     let parsed: Partial<Plan> = {};
     try {
       parsed = JSON.parse(raw);

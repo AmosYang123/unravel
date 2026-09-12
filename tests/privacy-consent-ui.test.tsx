@@ -19,7 +19,7 @@ it("does not enable sharing until the person reads the notice and confirms", asy
   render(<MemoryRouter><PrivacySection /></MemoryRouter>);
   fireEvent.click(screen.getAllByRole("switch")[1]!);
   expect(mocks.update).not.toHaveBeenCalled();
-  expect(screen.getByText(/voice recordings to Groq/)).toBeTruthy();
+  expect(screen.getByText(/journal text.*voice recordings.*to Groq/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Not now" }));
   expect(mocks.update).not.toHaveBeenCalled();
   fireEvent.click(screen.getAllByRole("switch")[1]!);
@@ -40,4 +40,10 @@ it("renders the public policy without account information", () => {
   expect(screen.getByRole("heading", { name: "Privacy policy" })).toBeTruthy();
   expect(screen.getByText(/administrator dashboard/)).toBeTruthy();
   expect(screen.getByText(/Google's Gmail API/)).toBeTruthy();
+});
+
+it("names Groq as the AI processor without showing the removed Gemini processor", () => {
+  render(<MemoryRouter><Privacy /></MemoryRouter>);
+  expect(screen.getByText(/send journal text.*to Groq/i)).toBeTruthy();
+  expect(screen.queryByText(/Google Gemini/i)).toBeNull();
 });

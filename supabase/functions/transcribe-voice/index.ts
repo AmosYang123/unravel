@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@3";
 
 const SUMMARY_THRESHOLD_SECONDS = 300; // 5 minutes
-const GEMINI_MODEL = "gemini-3.6-flash";
+const TEXT_MODEL = "openai/gpt-oss-20b";
 
 // Browser origins allowed to call this function. Pinned so a random page cannot
 // drive a signed-in user's session.
@@ -126,33 +126,30 @@ Deno.serve(async (req) => {
     let summary: string | null = null;
     const seconds = Number(entry.audio_seconds ?? 0);
     if (seconds > SUMMARY_THRESHOLD_SECONDS || transcript.length > 3000) {
-      const geminiKey = Deno.env.get("GEMINI_API_KEY");
-      if (!geminiKey) {
-        console.error("transcribe-voice summary skipped: GEMINI_API_KEY is not configured");
+      if (!groqKey) {
+        console.error("transcribe-voice summary skipped: GROQ_API_KEY is not configured");
       } else {
         const chatRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+          "https://api.groq.com/openai/v1/chat/completions",
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-goog-api-key": geminiKey,
+              Authorization: `Bearer ${groqKey}`,
             },
             body: JSON.stringify({
-              systemInstruction: {
-                parts: [
-                  {
-                    text:
+              model: TEXT_MODEL,
+              messages: [
+                {
+                  role: "system",
+                  content:
                       "You condense a person's private voice journal into a short readable recap. " +
                       "Use their own words and second person ('you'). 3-5 short sentences or bullets. " +
                       "No advice, no diagnosis, no encouragement, no judgement — just what they talked about and how they sounded.",
-                  },
-                ],
-              },
-              contents: [
+                },
                 {
                   role: "user",
-                  parts: [{ text: transcript.slice(0, 24000) }],
+                  content: transcript.slice(0, 24000),
                 },
               ],
             }),
@@ -161,9 +158,7 @@ Deno.serve(async (req) => {
 
         if (chatRes.ok) {
           const chatData = await chatRes.json();
-          const text = chatData?.candidates?.[0]?.content?.parts
-            ?.map((p: { text?: string }) => p?.text ?? "")
-            .join("");
+          const text = chatData?.choices?.[0]?.message?.content;
           if (typeof text === "string" && text.trim()) summary = text.trim();
         } else {
           console.error(`Summary failed [${chatRes.status}]`);

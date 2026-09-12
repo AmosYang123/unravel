@@ -1061,7 +1061,7 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
       <Divider />
       <Row
         title="AI suggestions"
-        description="Optional sharing with Google Gemini, Groq, Google Search and Deezer. Review the details before enabling. Your journal still syncs to Supabase when this is off."
+        description="Optional sharing with Groq, Google Search and Deezer. Review the details before enabling. Your journal still syncs to Supabase when this is off."
       >
         <Switch
           value={settings.aiSuggestionsEnabled}

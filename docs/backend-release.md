@@ -29,7 +29,7 @@ Set secrets through the target project's Edge Function secrets dashboard. Never 
 
 - `ENABLE_DEV_CONTROLS`: absent or `false` in production. The destructive development function now returns 404 before reading accounts unless this is exactly `true`. Only explicitly enable it in an isolated test project.
 - `ALLOWED_ORIGINS`: the actual HTTPS web origin(s), comma-separated.
-- `GEMINI_API_KEY`: advice and tag normalization; optional transcript cleanup also uses it.
+- `GROQ_API_KEY`: transcription, advice, tag normalization and optional transcript summaries. The adult account holder must create and manage this secret; never put it in either client or in git.
 - `GROQ_API_KEY`: voice transcription.
 - `GOOGLE_CSE_API_KEY` and `GOOGLE_CSE_ID`: external article search when enabled.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, and `REMINDER_FROM`: the authorized Gmail sender configuration.

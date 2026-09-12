@@ -8,6 +8,13 @@ import { buildShelves, shelfSignalText } from "../supabase/functions/article-rec
 
 afterEach(() => vi.restoreAllMocks());
 
+it.each(["entry-advice", "normalize-tag", "transcribe-voice"])("%s uses Groq and contains no Gemini credential or endpoint", (name) => {
+  const source = readFileSync(`supabase/functions/${name}/index.ts`, "utf8");
+  expect(source).toContain("https://api.groq.com/openai/v1/");
+  expect(source).toContain("GROQ_API_KEY");
+  expect(source).not.toMatch(/GEMINI_API_KEY|generativelanguage\.googleapis\.com/);
+});
+
 it.each(["entry-advice", "transcribe-voice", "normalize-tag", "spotify-songs"])("%s refuses external processing without current consent", async (name) => {
   const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("External calls must not occur"));
   const client = {

@@ -215,7 +215,7 @@ const PrivacySection = () => {
         )}
         <Row
           title="AI suggestions"
-          description="Optional sharing with Google Gemini, Groq, Google Search and Deezer. Review the details before enabling. Your journal still syncs to Supabase when this is off."
+          description="Optional sharing with Groq, Google Search and Deezer. Review the details before enabling. Your journal still syncs to Supabase when this is off."
         >
           <Switch
             checked={settings.aiSuggestionsEnabled}

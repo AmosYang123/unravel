@@ -16,13 +16,15 @@ Website verification: 92 tests passed, web/mobile TypeScript passed, production 
 - [x] Set the user-selected support address: `unravelreminders+support@gmail.com`.
 - [ ] Test receiving and replying to a support email.
 - [x] Deploy website and verify `/`, `/privacy`, `/support`, and a bundled license over public HTTPS (HTTP 200 on September 12, 2026).
-- [ ] Resolve Gemini API under-18 audience prohibition; current teen-oriented integration is blocked.
+- [x] Remove Gemini from app code; Groq now handles consented AI text and transcription.
+- [ ] Revoke the Groq key exposed in chat, have an adult account holder create a replacement, review Data Controls/model terms, and set it as the Supabase `GROQ_API_KEY` secret.
 - [ ] Resolve Deezer use permission and Google search result storage rights.
-- [ ] Confirm logo/icon provenance.
+- [x] Record supplied logo provenance: generated with Nano Banana Pro and selected for this project.
 - [ ] Verify production provider/SMTP/retention settings and finalize policy/App Privacy labels.
 - [ ] Deploy backend changes and test real consent, email and account deletion.
 - [ ] Build signed release, inspect archive, and test supported physical devices.
 - [ ] Prepare App Store listing, age rating, screenshots and working review account.
+- [x] Record business model: completely free, with no purchases or subscriptions planned for this release.
 
 ## Apple sources and scope
 
@@ -58,14 +60,14 @@ Do not select “Data Not Collected.” Account-linked data includes anonymous S
 | --- | --- | --- |
 | Name, email / Contact Info | Supabase; Google Gmail for enabled reminders; configured authentication email provider | App Functionality; linked to account |
 | User ID / Identifiers | Supabase | Authentication, security/rate limiting; linked |
-| Journal text, transcripts, addenda, tags / Other User Content | Supabase; Google Gemini after consent | App Functionality, Product Personalization; linked |
+| Journal text, transcripts, addenda, tags / Other User Content | Supabase; Groq after consent | App Functionality, Product Personalization; linked |
 | Voice / Audio Data | Supabase; Groq for transcription (also automatic after saving voice entries with AI enabled) | App Functionality; linked |
-| Mood, energy and wellbeing content / Health, Sensitive Info where applicable | Supabase; Google Gemini after consent | Functionality, Personalization and Analytics for admin mood/usage reports; linked |
-| Interests, goals, school year, music preferences / Other Data and applicable content categories | Supabase; Google Gemini, Google Custom Search, Deezer for enabled features | Personalization; linked internally even if no account ID is sent to provider |
+| Mood, energy and wellbeing content / Health, Sensitive Info where applicable | Supabase; Groq after consent | Functionality, Personalization and Analytics for admin mood/usage reports; linked |
+| Interests, goals, school year, music preferences / Other Data and applicable content categories | Supabase; Groq, Google Custom Search, Deezer for enabled features | Personalization; linked internally even if no account ID is sent to provider |
 | Entry counts/times, breathing and pseudonymous longitudinal trends / Product Interaction | Supabase and restricted administrator dashboard | Functionality and Analytics; account linkage remains possible |
 | IP/request metadata, errors / Diagnostics or Other Data as applicable | Hosting, Supabase, Google, Groq, Deezer and destination websites | Verify actual retention, association and purposes with each provider |
 
-No ad SDK or cross-company advertising tracking was found. This is a code finding, not verification of all provider practices. Do not request ATT solely because cloud services exist; reassess if tracking is introduced. Authentication SMTP is not identifiable from this repository. Reminder Gmail is identifiable. Verify whether paid Google AI processing terms apply, training/retention controls, Groq retention, subprocessors, and equal data protection before publishing the policy. Do not promise zero retention or that providers never train without confirming the account configuration.
+No ad SDK or cross-company advertising tracking was found. This is a code finding, not verification of all provider practices. Do not request ATT solely because cloud services exist; reassess if tracking is introduced. Authentication SMTP is not identifiable from this repository. Reminder Gmail is identifiable. Verify Groq Data Controls, retention, subprocessors and selected-model terms before finalizing the policy. Do not promise zero retention without confirming the account configuration.
 
 ## Deployment order
 

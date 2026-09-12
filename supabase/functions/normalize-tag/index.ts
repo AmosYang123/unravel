@@ -26,7 +26,7 @@ import { z } from "npm:zod@3";
  * text, no name, no ids. None of it is logged.
  */
 
-const MODEL = "gemini-3.6-flash";
+const MODEL = "openai/gpt-oss-20b";
 
 /** Where the returned value came from. */
 type Source = "match" | "canonical" | "guess" | "none";
@@ -180,23 +180,18 @@ async function askModel(
   let res: Response;
   try {
     res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: kind === "artist" ? ARTIST_SYSTEM : INTEREST_SYSTEM }] },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: JSON.stringify({ inputs: terms }) }],
-            },
+          model: MODEL,
+          messages: [
+            { role: "system", content: kind === "artist" ? ARTIST_SYSTEM : INTEREST_SYSTEM },
+            { role: "user", content: JSON.stringify({ inputs: terms }) },
           ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0,
-            thinkingConfig: { thinkingLevel: "low" },
-          },
+          response_format: { type: "json_object" },
+          temperature: 0,
         }),
       },
     );
@@ -211,9 +206,9 @@ async function askModel(
   }
 
   const data = (await res.json().catch(() => null)) as unknown;
-  const parts = (data as { candidates?: { content?: { parts?: { text?: string }[] } }[] } | null)
-    ?.candidates?.[0]?.content?.parts;
-  const raw = Array.isArray(parts) ? parts.map((p) => p?.text ?? "").join("") : "";
+  const content = (data as { choices?: { message?: { content?: unknown } }[] } | null)
+    ?.choices?.[0]?.message?.content;
+  const raw = typeof content === "string" ? content : "";
   if (!raw) return out;
 
   let parsed: unknown;
@@ -291,7 +286,7 @@ Deno.serve(async (req) => {
     const whole = parsedBody.data.whole?.trim().slice(0, MAX_LENGTH) ?? "";
     const allowModel = parsedBody.data.allowModel !== false;
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("GROQ_API_KEY");
     const useModel = allowModel && Boolean(apiKey);
 
     const settle = (input: string, value: string | null, source: Source): Result =>

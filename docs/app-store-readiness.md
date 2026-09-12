@@ -21,7 +21,8 @@ Website verification: 92 tests passed, web/mobile TypeScript passed, production 
 - [ ] Resolve Deezer use permission and Google search result storage rights.
 - [x] Record supplied logo provenance: generated with Nano Banana Pro and selected for this project.
 - [ ] Verify production provider/SMTP/retention settings and finalize policy/App Privacy labels.
-- [ ] Deploy backend changes and test real consent, email and account deletion.
+- [x] Apply production database migrations and deploy the release Edge Functions (September 12, 2026).
+- [ ] Test real consent, Groq processing, email reminders and account deletion with disposable production accounts.
 - [ ] Build signed release, inspect archive, and test supported physical devices.
 - [ ] Prepare App Store listing, age rating, screenshots and working review account.
 - [x] Record business model: completely free, with no purchases or subscriptions planned for this release.
@@ -77,7 +78,7 @@ No ad SDK or cross-company advertising tracking was found. This is a code findin
 4. Build the updated native client. Confirm the archive uses the correct bundle ID, signing, SDK, manifests, entitlements and microphone purpose string. Complete export-compliance questions based on actual encryption use (including local hashing); do not guess.
 5. Run the device walkthrough below. Old clients cannot grant the current consent version. Requests already dispatched before revocation cannot be recalled.
 
-No production migration, Edge Function deployment, website publication or App Store Connect submission was performed by this audit.
+The production migrations and Edge Functions were deployed on September 12, 2026. Live disposable-account verification and App Store Connect submission were not performed by this audit.
 
 ## Review notes / test walkthrough
 

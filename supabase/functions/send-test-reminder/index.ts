@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
 
     // APP_URL is unset on this project, and the builder deliberately omits the
     // link when it is — the test email matches whatever the real one would be.
-    const { text, html } = reminderBody(name, discreet === true, Deno.env.get("APP_URL") ?? null, Deno.env.get("REMINDER_APP_LINK") ?? null);
+    const { text, html } = reminderBody(name, discreet === true, Deno.env.get("APP_URL") ?? null, Deno.env.get("REMINDER_APP_LINK") ?? null, Deno.env.get("REMINDER_POSTAL_ADDRESS") ?? null);
 
     await sendReminderEmail({ to: email, subject: REMINDER_SUBJECT, text, html });
 

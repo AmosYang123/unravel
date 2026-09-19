@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
       continue
     }
 
-    const { text, html } = reminderBody(p.name ?? '', p.discreet_notifications ?? true, APP_URL, Deno.env.get('REMINDER_APP_LINK') ?? null)
+    const { text, html } = reminderBody(p.name ?? '', p.discreet_notifications ?? true, APP_URL, Deno.env.get('REMINDER_APP_LINK') ?? null, Deno.env.get('REMINDER_POSTAL_ADDRESS') ?? null)
     try {
       await sendReminderEmail({ to: email, subject: REMINDER_SUBJECT, text, html })
     } catch (error) {

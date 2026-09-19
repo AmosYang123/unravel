@@ -18,6 +18,7 @@ import PasswordField from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { MIN_PASSWORD_LENGTH, passwordMeetsRule, useAuth } from "@/lib/auth";
 import { useAnonymousSignIn } from "@/lib/authCapabilities";
+import { checkMinimumAge, MINIMUM_AGE } from "../lib/age";
 import { parseAuthLink, passwordRecoveryUrl, setPasswordRecoveryPending } from "../lib/passwordRecovery";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
@@ -67,6 +68,13 @@ export default function AuthScreen() {
   // Ticked once per visit, never persisted. Gates signup and the guest path
   // only — sign-in already proves they've been through this before.
   const [agreed, setAgreed] = useState(false);
+  // Same lifetime as the tick above: asked once per visit, never persisted.
+  // Held as three fields because React Native has no date input and this
+  // needs no new dependency; they are assembled into the YYYY-MM-DD string
+  // the shared age check reads, so both clients apply one rule.
+  const [birthDay, setBirthDay] = useState("");
+  const [birthMonth, setBirthMonth] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   // A reset link's tokens, held unused until the new password is about to be
   // saved. Nothing is signed in on the strength of the link alone.
   const [recoveryTokens, setRecoveryTokens] = useState<{ access: string; refresh: string } | null>(null);
@@ -125,7 +133,14 @@ export default function AuthScreen() {
   const passwordOk = passwordMeetsRule(password);
   // Sign-in is never gated on this — only creating an account or starting a
   // fresh guest journal need the acknowledgement.
-  const signupGated = mode === "signup" && !agreed;
+  const birthDate =
+    birthYear.length === 4 && birthMonth && birthDay
+      ? `${birthYear}-${birthMonth.padStart(2, "0")}-${birthDay.padStart(2, "0")}`
+      : "";
+  const ageCheck = checkMinimumAge(birthDate);
+  const ageCleared = ageCheck === "ok";
+  const ageAnswered = birthDay !== "" || birthMonth !== "" || birthYear !== "";
+  const signupGated = mode === "signup" && (!agreed || !ageCleared);
   const canSubmit =
     email.trim().length > 3 &&
     (mode === "recovery" || (password.length > 0 &&
@@ -297,6 +312,62 @@ export default function AuthScreen() {
       color: theme.colors.foreground,
     },
   ];
+
+  // Asked before the privacy tick: this one can refuse the account outright,
+  // and consent to a policy only means something once we are allowed to ask
+  // for it at all. Digits only, so the keyboard never offers anything the
+  // shared parser would reject.
+  const digits = (value: string, max: number) => value.replace(/[^0-9]/g, "").slice(0, max);
+  const ageRow = (
+    <View>
+      <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>Your date of birth</Text>
+      <View style={styles.birthRow}>
+        <TextInput
+          style={[inputStyle, styles.birthPart]}
+          value={birthDay}
+          accessibilityLabel="Day of birth"
+          onChangeText={(v) => setBirthDay(digits(v, 2))}
+          keyboardType="number-pad"
+          placeholder="DD"
+          maxLength={2}
+          placeholderTextColor={theme.colors.mutedForeground}
+        />
+        <TextInput
+          style={[inputStyle, styles.birthPart]}
+          value={birthMonth}
+          accessibilityLabel="Month of birth"
+          onChangeText={(v) => setBirthMonth(digits(v, 2))}
+          keyboardType="number-pad"
+          placeholder="MM"
+          maxLength={2}
+          placeholderTextColor={theme.colors.mutedForeground}
+        />
+        <TextInput
+          style={[inputStyle, styles.birthYear]}
+          value={birthYear}
+          accessibilityLabel="Year of birth"
+          onChangeText={(v) => setBirthYear(digits(v, 4))}
+          keyboardType="number-pad"
+          placeholder="YYYY"
+          maxLength={4}
+          placeholderTextColor={theme.colors.mutedForeground}
+        />
+      </View>
+      {ageCheck === "too-young" ? (
+        <Text style={[styles.ageNote, { color: theme.colors.destructive }]}>
+          Unravel is for people aged {MINIMUM_AGE} and over.
+        </Text>
+      ) : ageAnswered && ageCheck === "unknown" ? (
+        <Text style={[styles.ageNote, { color: theme.colors.destructive }]}>
+          That is not a date in the past — check it over.
+        </Text>
+      ) : (
+        <Text style={[styles.ageNote, { color: theme.colors.mutedForeground }]}>
+          Checked once to confirm you are {MINIMUM_AGE} or older, then discarded.
+        </Text>
+      )}
+    </View>
+  );
 
   const resendLabel =
     cooldown > 0 ? `Send it again in ${cooldown}s` : busy ? "Sending…" : "Send it again";
@@ -605,7 +676,12 @@ export default function AuthScreen() {
           {error && <Text style={[styles.message, { color: theme.colors.destructive }]}>{error}</Text>}
           {notice && <Text style={[styles.message, { color: theme.colors.mutedForeground }]}>{notice}</Text>}
 
-          {mode === "signup" && ackRow}
+          {mode === "signup" && (
+            <>
+              {ageRow}
+              {ackRow}
+            </>
+          )}
 
           <Pressable
             onPress={submit}
@@ -645,17 +721,18 @@ export default function AuthScreen() {
 
           {mode === "signin" && guestEnabled && (
             <View style={[styles.guest, { borderTopColor: theme.colors.border }]}>
+              {ageRow}
               {ackRow}
               <Pressable
                 onPress={continueAsGuest}
-                disabled={busy || authLoading || !agreed}
+                disabled={busy || authLoading || !agreed || !ageCleared}
                 accessibilityRole="button"
                 style={[
                   styles.guestButton,
                   {
                     borderColor: theme.colors.border,
                     marginTop: 16,
-                    opacity: busy || authLoading || !agreed ? 0.5 : 1,
+                    opacity: busy || authLoading || !agreed || !ageCleared ? 0.5 : 1,
                   },
                 ]}
               >
@@ -711,6 +788,10 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   ruleText: { fontFamily: fonts.body, fontSize: 12 },
   error: { fontFamily: fonts.body, fontSize: 12, marginTop: 8 },
   message: { fontFamily: fonts.body, fontSize: 14, marginTop: 16 },
+  birthRow: { flexDirection: "row", gap: 8 },
+  birthPart: { flex: 1 },
+  birthYear: { flex: 1.6 },
+  ageNote: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginTop: 8 },
   ackRow: { flexDirection: "row", alignItems: "center", marginTop: 20 },
   ackToggle: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   ackBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },

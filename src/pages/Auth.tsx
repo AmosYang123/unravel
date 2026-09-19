@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useAnonymousSignIn } from "@/lib/authCapabilities";
 import { MIN_PASSWORD_LENGTH, describeAuthError, passwordMeetsRule } from "@/lib/password";
+import { checkMinimumAge, MINIMUM_AGE } from "@/lib/age";
 import { cn } from "@/lib/utils";
 
 type Mode = "signin" | "signup" | "forgot" | "sent";
@@ -68,6 +69,11 @@ const AuthPage = () => {
   // Ticked once per visit, never persisted. Gates signup and the guest path
   // only — sign-in already proves they've been through this before.
   const [agreed, setAgreed] = useState(false);
+  // Asked once per visit and never persisted, exactly like the tick above.
+  // Creating an account and starting a guest journal both collect a minor’s
+  // writing, so both ask; signing in does not, since the account already
+  // cleared this gate when it was made.
+  const [birthDate, setBirthDate] = useState("");
   const passwordRef = useRef<HTMLDivElement | null>(null);
 
   const from = sanitizeRedirect((location.state as { from?: unknown } | null)?.from);
@@ -85,7 +91,9 @@ const AuthPage = () => {
   const emailLooksUsable = email.trim().length > 3;
   // Sign-in is never gated on this — only creating an account or starting a
   // fresh guest journal need the acknowledgement.
-  const signupGated = mode === "signup" && !agreed;
+  const ageCheck = checkMinimumAge(birthDate);
+  const ageCleared = ageCheck === "ok";
+  const signupGated = mode === "signup" && (!agreed || !ageCleared);
   const canSubmit =
     emailLooksUsable &&
     (mode === "forgot" ||
@@ -207,6 +215,36 @@ const AuthPage = () => {
 
   const resendLabel =
     cooldown > 0 ? `Send it again in ${cooldown}s` : busy ? "Sending…" : "Send it again";
+
+  // Asked before the privacy tick: this one can refuse the account outright,
+  // and consent to a policy only means something once we are allowed to ask
+  // for it at all.
+  const ageRow = (
+    <div>
+      <label htmlFor="birth-date" className="mb-2 block text-sm text-muted-foreground">
+        Your date of birth
+      </label>
+      <Input
+        id="birth-date"
+        type="date"
+        value={birthDate}
+        onChange={(e) => setBirthDate(e.target.value)}
+        autoComplete="bday"
+        className="h-12 rounded-xl"
+      />
+      {ageCheck === "too-young" ? (
+        <p className="mt-2 text-xs text-destructive">
+          Unravel is for people aged {MINIMUM_AGE} and over.
+        </p>
+      ) : birthDate && ageCheck === "unknown" ? (
+        <p className="mt-2 text-xs text-destructive">That is not a date in the past — check it over.</p>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Checked once to confirm you are {MINIMUM_AGE} or older, then discarded.
+        </p>
+      )}
+    </div>
+  );
 
   // Shown above whichever primary action needs it (signup or guest), never
   // both at once since the two live in different modes.
@@ -391,7 +429,12 @@ const AuthPage = () => {
           {error && <p className="text-sm text-destructive">{error}</p>}
           {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
-          {mode === "signup" && ackRow}
+          {mode === "signup" && (
+            <>
+              {ageRow}
+              {ackRow}
+            </>
+          )}
 
           <Button
             type="submit"
@@ -405,11 +448,12 @@ const AuthPage = () => {
 
         {mode === "signin" && guestEnabled && (
           <div className="mt-6 border-t pt-6">
+            <div className="mb-4">{ageRow}</div>
             {ackRow}
             <Button
               type="button"
               variant="ghost"
-              disabled={busy || authLoading || !agreed}
+              disabled={busy || authLoading || !agreed || !ageCleared}
               onClick={() => void continueAsGuest()}
               className="mt-4 h-12 w-full rounded-full"
             >

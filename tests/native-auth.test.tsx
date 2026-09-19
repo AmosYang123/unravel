@@ -77,6 +77,15 @@ it("sends to the configured web recovery page and uses an enumeration-safe notic
   expect(screen.getByText(/If an account exists/)).toBeTruthy();
   expect((screen.getByText("Send reset link in 60s").closest("button") as HTMLButtonElement).disabled).toBe(true);
 });
+// Fixed month/day so subtracting years can never land on a leap day.
+function giveBirthDate(yearsAgo: number) {
+  fireEvent.change(screen.getByLabelText("Day of birth"), { target: { value: "15" } });
+  fireEvent.change(screen.getByLabelText("Month of birth"), { target: { value: "01" } });
+  fireEvent.change(screen.getByLabelText("Year of birth"), { target: { value: String(new Date().getFullYear() - yearsAgo) } });
+}
+function giveAdultBirthDate() {
+  giveBirthDate(20);
+}
 it.each(["signin", "guest", "signup", "recovery", "resend"])("recovers from a rejected %s request", async (mode) => {
   vi.stubEnv("EXPO_PUBLIC_PASSWORD_RESET_URL", "https://app.example.com/reset-password");
   signIn();
@@ -84,11 +93,13 @@ it.each(["signin", "guest", "signup", "recovery", "resend"])("recovers from a re
   let label = "Sign in";
   if (mode === "guest") {
     fireEvent.click(checkbox());
+    giveAdultBirthDate();
     auth.signInAnonymously.mockRejectedValue(failure); label = "Continue as guest";
   } else if (mode === "signup") {
     fireEvent.click(screen.getByText("Create a new account"));
     fireEvent.change(screen.getByLabelText("Repeat password"), { target: { value: "password123" } });
     fireEvent.click(checkbox());
+    giveAdultBirthDate();
     auth.signUp.mockRejectedValue(failure); label = "Create account";
   } else if (mode === "recovery") {
     fireEvent.click(screen.getByText("Forgot password?"));
@@ -113,6 +124,7 @@ it("keeps create account locked until the privacy box is ticked, then enables it
   fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
   fireEvent.change(screen.getByLabelText("Repeat password"), { target: { value: "password123" } });
   expect((screen.getByText("Create account").closest("button") as HTMLButtonElement).disabled).toBe(true);
+  giveAdultBirthDate();
   fireEvent.click(checkbox());
   expect(checkbox().getAttribute("aria-checked")).toBe("true");
   expect((screen.getByText("Create account").closest("button") as HTMLButtonElement).disabled).toBe(false);
@@ -141,6 +153,7 @@ it("keeps continue-as-guest locked until the privacy box is ticked, then enables
   signIn();
   expect(checkbox().getAttribute("aria-checked")).toBe("false");
   expect((screen.getByText("Continue as guest").closest("button") as HTMLButtonElement).disabled).toBe(true);
+  giveAdultBirthDate();
   fireEvent.click(checkbox());
   expect((screen.getByText("Continue as guest").closest("button") as HTMLButtonElement).disabled).toBe(false);
 });
@@ -208,4 +221,41 @@ it("leaves an ordinary deep link alone", () => {
   render(<AuthScreen />);
   expect(auth.setSession).not.toHaveBeenCalled();
   expect(screen.getByText("Make your private space")).toBeTruthy();
+});
+it("refuses to create an account for an under-13 date of birth, however the box is ticked", () => {
+  render(<AuthScreen />);
+  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "person@example.com" } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+  fireEvent.change(screen.getByLabelText("Repeat password"), { target: { value: "password123" } });
+  fireEvent.click(checkbox());
+  giveBirthDate(8);
+
+  expect(screen.getByText(/aged 13 and over/)).toBeTruthy();
+  expect((screen.getByText("Create account").closest("button") as HTMLButtonElement).disabled).toBe(true);
+  expect(auth.signUp).not.toHaveBeenCalled();
+});
+it("refuses a guest journal for an under-13 date of birth", () => {
+  signIn();
+  fireEvent.click(checkbox());
+  giveBirthDate(8);
+  expect((screen.getByText("Continue as guest").closest("button") as HTMLButtonElement).disabled).toBe(true);
+  expect(auth.signInAnonymously).not.toHaveBeenCalled();
+});
+it("keeps the account shut until every part of the date is filled in", () => {
+  render(<AuthScreen />);
+  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "person@example.com" } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+  fireEvent.change(screen.getByLabelText("Repeat password"), { target: { value: "password123" } });
+  fireEvent.click(checkbox());
+  // A year on its own is not an answer, and must not read as one.
+  fireEvent.change(screen.getByLabelText("Year of birth"), { target: { value: "2005" } });
+  expect((screen.getByText("Create account").closest("button") as HTMLButtonElement).disabled).toBe(true);
+  giveAdultBirthDate();
+  expect((screen.getByText("Create account").closest("button") as HTMLButtonElement).disabled).toBe(false);
+});
+it("keeps non-digits out of the date fields", () => {
+  render(<AuthScreen />);
+  const day = screen.getByLabelText("Day of birth") as HTMLInputElement;
+  fireEvent.change(day, { target: { value: "1e5" } });
+  expect(day.value).toBe("15");
 });

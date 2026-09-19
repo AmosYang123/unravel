@@ -19,6 +19,39 @@ describe("reminder emails", () => {
     expect(reminderLink("https://example.com/")).toBe("https://example.com/write?mode=short");
     expect(reminderLink("broken")).toBeNull();
   });
+  it("tells every reminder how to stop the reminders", () => {
+    const plain = reminderBody("Sam", false, "https://example.com");
+    expect(plain.text).toContain("turn reminders off in Unravel's settings");
+    expect(plain.html).toContain("turn reminders off in Unravel&#39;s settings");
+    const discreet = reminderBody("Sam", true, "https://example.com");
+    expect(discreet.text).toContain("turn reminders off in the app's settings");
+  });
+  it("prints a postal address when one is configured", () => {
+    const email = reminderBody("Sam", false, "https://example.com", null, "Unravel, 1 Example St, Exeter EX1 1AA");
+    expect(email.text).toContain("Unravel, 1 Example St, Exeter EX1 1AA");
+    expect(email.html).toContain("Unravel, 1 Example St, Exeter EX1 1AA");
+  });
+  it("omits the footer address entirely when none is configured", () => {
+    const email = reminderBody("Sam", false, "https://example.com");
+    expect(email.html).not.toContain("<br>");
+  });
+  it("never lets the discreet footer name the app or carry an address", () => {
+    // Discreet exists so a watched inbox learns nothing. A compliance footer
+    // must not be the thing that gives it away.
+    const email = reminderBody("Sam", true, "https://example.com", null, "Unravel, 1 Example St, Exeter EX1 1AA");
+    expect(email.text.toLowerCase()).not.toContain("unravel");
+    expect(email.text).not.toContain("Example St");
+    expect(email.html).not.toContain("Example St");
+  });
+  it("escapes a postal address rather than trusting the configured value", () => {
+    const email = reminderBody("Sam", false, "https://example.com", null, "<script>alert(1)</script>");
+    expect(email.html).not.toContain("<script>");
+    expect(email.html).toContain("&lt;script&gt;");
+  });
+  it("keeps the footer inside the styled wrapper", () => {
+    const email = reminderBody("Sam", false, "https://example.com");
+    expect(email.html.trimEnd().endsWith("</div>")).toBe(true);
+  });
   it("keeps discreet plain text free of app names and links", () => {
     const email = reminderBody("Sam", true, null, "unravel://write?mode=short");
     expect(email.text.toLowerCase()).not.toContain("unravel");

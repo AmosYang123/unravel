@@ -34,6 +34,7 @@ Configure these secrets before deploying `send-reminders` and `send-test-reminde
 - `REMINDER_FROM=Unravel <unravelreminders@gmail.com>`
 - `REMINDER_APP_LINK=unravel://write?mode=short`
 - `REMINDER_CRON_SECRET` — same random value stored in the database Vault as `reminder_cron_secret`
+- `REMINDER_POSTAL_ADDRESS` — optional. A postal address for the sender, printed in the reminder footer. Left unset, no address is printed. It is deliberately omitted from discreet reminders, which must not identify the app; only the non-discreet email carries it.
 
 Enable the Gmail API in the Google Cloud project and add `unravelreminders@gmail.com` as an OAuth test user while the consent screen remains in testing. A refresh token can then be created through Google's OAuth flow. Do not use the Gmail account password or an app password: Supabase Edge Functions block outbound SMTP ports, while the Gmail API uses HTTPS.
 

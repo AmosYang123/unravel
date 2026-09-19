@@ -2,7 +2,14 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ from: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: db.from } }));
-vi.mock("@react-native-async-storage/async-storage", () => ({ default: { multiRemove: vi.fn() } }));
+const nativeStorage = vi.hoisted(() => new Map<string, string>());
+const mockAsyncStorage = vi.hoisted(() => () => ({ default: {
+  getItem: async (key: string) => nativeStorage.get(key) ?? null,
+  setItem: async (key: string, value: string) => { nativeStorage.set(key, value); },
+  multiRemove: async (keys: string[]) => { for (const key of keys) nativeStorage.delete(key); },
+} }));
+vi.mock("@react-native-async-storage/async-storage", mockAsyncStorage);
+vi.mock("../mobile/node_modules/@react-native-async-storage/async-storage", mockAsyncStorage);
 vi.mock("../mobile/lib/passcode", () => ({ uid: vi.fn() }));
 afterEach(cleanup);
 function deferred<T>() {
@@ -65,6 +72,55 @@ for (const platform of ["web", "mobile"]) {
       });
       expect(result.current.settings.lockEnabled).toBe(false);
       expect(result.current.settings.passcode).toBe("");
+    });
+    it("reports a write that changed no rows instead of a save", async () => {
+      const store = platform === "web" ? await import("../src/lib/store") : await import("../mobile/lib/store");
+      store.clearUserData();
+      db.from.mockImplementation(() => query(Promise.resolve({ error: { message: "offline" }, data: null })));
+      await store.loadUserData("one");
+      const { result } = renderHook(() => store.useEntries());
+      // The row is gone (deleted elsewhere, or hidden by RLS): no error, no rows touched.
+      db.from.mockImplementation(() => query(Promise.resolve({ data: [], error: null })));
+      const addenda = [{ text: "Add something", addedAt: "2026-01-01T00:00:00.000Z" }];
+      await act(async () => {
+        await expect(result.current.updateEntry("missing", { addenda })).rejects.toThrow("no longer there");
+      });
+      expect(result.current.entries).toEqual([]);
+    });
+    it("saves an addendum when the row is still there", async () => {
+      const store = platform === "web" ? await import("../src/lib/store") : await import("../mobile/lib/store");
+      store.clearUserData();
+      db.from.mockImplementation(() => query(Promise.resolve({ error: { message: "offline" }, data: null })));
+      await store.loadUserData("one");
+      const { result } = renderHook(() => store.useEntries());
+      db.from.mockImplementation(() => query(Promise.resolve({ data: { id: "e1", created_at: "2026-01-01T00:00:00.000Z", mode: "short", mood: 3, energy: 3 }, error: null })));
+      await act(async () => {
+        await result.current.addEntry({ mode: "short", mood: 3, energy: 3, feelings: [], text: "Private words" });
+      });
+      db.from.mockImplementation(() => query(Promise.resolve({ data: [{ id: "e1" }], error: null })));
+      const addenda = [{ text: "Add something", addedAt: "2026-01-01T00:00:00.000Z" }];
+      await act(async () => {
+        await result.current.updateEntry("e1", { addenda });
+      });
+      expect(result.current.entries[0].addenda).toEqual(addenda);
+    });
+    it("leaves no unfinished writing behind on sign-out", async () => {
+      const store = platform === "web" ? await import("../src/lib/store") : await import("../mobile/lib/store");
+      const drafts = platform === "web" ? await import("../src/lib/drafts") : await import("../mobile/lib/drafts");
+      const read = (key: string) => platform === "web" ? localStorage.getItem(key) : nativeStorage.get(key) ?? null;
+      const write = (key: string, value: string) => platform === "web" ? localStorage.setItem(key, value) : void nativeStorage.set(key, value);
+      store.clearUserData();
+      db.from.mockImplementation(() => query(Promise.resolve({ error: { message: "offline" }, data: null })));
+      await store.loadUserData("one");
+      write(drafts.draftKey("short", "one"), JSON.stringify({ text: "Private words" }));
+      write("quiet.sliders.one.short.v2", JSON.stringify({ mood: 3 }));
+      write(drafts.draftKey("longform", "one"), JSON.stringify({ text: "More private words" }));
+      store.clearUserData();
+      await vi.waitFor(() => {
+        expect(read(drafts.draftKey("short", "one"))).toBeNull();
+        expect(read("quiet.sliders.one.short.v2")).toBeNull();
+        expect(read(drafts.draftKey("longform", "one"))).toBeNull();
+      });
     });
   });
 }

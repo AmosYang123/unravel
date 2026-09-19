@@ -12,9 +12,15 @@ import * as Crypto from 'expo-crypto';
  * to the web app's, so one account's passcode works on both platforms.
  */
 const PASSCODE_SCHEME = 'pbkdf2';
-// Four digits are also protected by an in-app attempt delay. A much larger
-// value made the JavaScript implementation visibly stall on phones.
-const PASSCODE_ITERATIONS = 2_000;
+// Must stay equal to PASSCODE_ITERATIONS in src/lib/store.ts: both trees write
+// the same `profiles.passcode` row and there is no shared module between them.
+// Only ever raise this — a lower value here would weaken every row the web app
+// wrote. Four digits are also protected by an in-app attempt delay.
+const PASSCODE_ITERATIONS = 210_000;
+// The most a *stored* row may ask us to run, so a corrupt or hostile row cannot
+// stall the lock screen inside pbkdf2Async. Leaves room for one future raise of
+// PASSCODE_ITERATIONS; anything above this fails closed instead of deriving.
+const PASSCODE_MAX_ITERATIONS = 600_000;
 const PASSCODE_SALT_BYTES = 16;
 const PASSCODE_HASH_BYTES = 32; // 256 bits
 
@@ -40,16 +46,24 @@ export function isLegacyPasscode(stored: string): boolean {
   return /^\d{4}$/.test(stored);
 }
 
-/** Older PBKDF2 rows still verify once, then get replaced with the faster format. */
+/**
+ * Weaker rows still verify once, then get rewritten at the current strength.
+ * Upgrade-only on purpose: a row already at or above PASSCODE_ITERATIONS is left
+ * alone, so unlocking here can never lower what the web app stored.
+ */
 export function needsPasscodeUpgrade(stored: string): boolean {
   if (isLegacyPasscode(stored)) return true;
   const [scheme, rawIterations] = stored.split('$');
-  return scheme === PASSCODE_SCHEME && Number(rawIterations) !== PASSCODE_ITERATIONS;
+  if (scheme !== PASSCODE_SCHEME) return false;
+  const iterations = Number(rawIterations);
+  return Number.isInteger(iterations) && iterations < PASSCODE_ITERATIONS;
 }
 
 /** Hash a code for storage, with a fresh random salt. */
 export async function hashPasscode(code: string): Promise<string> {
-  const salt = Crypto.getRandomBytes(PASSCODE_SALT_BYTES);
+  // getRandomValues is the documented CSPRNG; getRandomBytes falls back to
+  // `Math.random` in development.
+  const salt = Crypto.getRandomValues(new Uint8Array(PASSCODE_SALT_BYTES));
   const hash = await derive(code, salt, PASSCODE_ITERATIONS);
   return `${PASSCODE_SCHEME}$${PASSCODE_ITERATIONS}$${toHex(salt)}$${hash}`;
 }
@@ -61,7 +75,8 @@ export async function verifyPasscode(code: string, stored: string): Promise<bool
   const [scheme, rawIterations, saltHex, hashHex, extra] = stored.split('$');
   if (scheme !== PASSCODE_SCHEME || !saltHex || !hashHex) return false;
   const iterations = Number(rawIterations);
-  if (extra !== undefined || !Number.isInteger(iterations) || iterations <= 0 || iterations > 1_000_000) return false;
+  if (extra !== undefined || !Number.isInteger(iterations) || iterations <= 0) return false;
+  if (iterations > PASSCODE_MAX_ITERATIONS) return false;
   if (!/^[0-9a-f]{32}$/.test(saltHex) || !/^[0-9a-f]{64}$/.test(hashHex)) return false;
   const candidate = await derive(code, fromHex(saltHex), iterations);
   // Constant-time-ish compare; both strings are the same fixed length here.

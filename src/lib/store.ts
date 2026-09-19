@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import type { Addendum, Entry, NewEntry, Settings, SongSuggestion, SongSuggestions, SupportPlan, ThemeName } from "./types";
+import type { Addendum, Entry, EntryMode, NewEntry, Settings, SongSuggestion, SongSuggestions, SupportPlan, ThemeName } from "./types";
+import { draftKey } from "./drafts";
 import { isYearLevel } from "./onboarding";
 
 type EntryInsert = Database["public"]["Tables"]["entries"]["Insert"];
@@ -162,6 +163,12 @@ const toEntry = (row: EntryRow): Entry => ({
 
 /** Newest first, the order the journal is read in everywhere. */
 const byNewest = (a: Entry, b: Entry) => b.createdAt.localeCompare(a.createdAt);
+
+/** A filter that matches nothing is not an error to Supabase, so an update that
+    touched no row comes back clean and the UI reports a save that never happened. */
+const assertRowWritten = (rows: { id: string }[] | null) => {
+  if (!rows?.length) throw new Error("That entry is no longer there. It may have been deleted on another device.");
+};
 
 const toEntryRow = (patch: Partial<Entry>): EntryUpdate => {
   const row: EntryUpdate = {};
@@ -432,14 +439,30 @@ async function purgeExpiredDeletes(userId: string, deleted: Entry[]) {
   set({ deletedEntries: state.deletedEntries.filter((e) => !ids.includes(e.id)) });
 }
 
+/** Every entry mode, so sign-out can sweep the per-mode local keys. Written as a
+    `satisfies` map so a newly added mode is a type error, not a draft left behind. */
+const ENTRY_MODES = Object.keys({
+  longform: 1, short: 1, bullets: 1, voice: 1, mood: 1, prompt: 1, gratitude: 1,
+} satisfies Record<EntryMode, 1>) as EntryMode[];
+
+/** The per-user local keys that hold unfinished writing: the draft itself and the
+    slider positions the editor remembers beside it. */
+const localUserKeys = (userId: string | null): string[] =>
+  userId ? ENTRY_MODES.flatMap((mode) => [draftKey(mode, userId), `quiet.sliders.${userId}.${mode}.v2`]) : [];
+
 export function clearUserData() {
   loadGeneration += 1;
+  const userId = state.userId;
   // Legacy prototype keys are not namespaced per user and hold entry text and a passcode.
+  // The per-user draft and slider keys hold a whole unsent entry, which must not be
+  // readable by whoever signs in next on a shared machine.
   try {
     localStorage.removeItem(LEGACY_ENTRIES_KEY);
     localStorage.removeItem(LEGACY_SETTINGS_KEY);
-  } catch {
+    for (const key of localUserKeys(userId)) localStorage.removeItem(key);
+  } catch (err) {
     // Storage can be unavailable (private mode); local state still gets cleared below.
+    console.error("Couldn't clear local journal data on sign-out:", err);
   }
   state = {
     userId: null,
@@ -674,13 +697,15 @@ export function useEntries() {
     const assertCurrent = () => {
       if (generation !== loadGeneration || userId !== state.userId) throw new Error("Your account changed. Please reopen this screen.");
     };
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("entries")
       .update(toEntryRow(patch))
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id");
     assertCurrent();
     if (error) throw new Error(error.message);
+    assertRowWritten(data);
     set({ entries: state.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
   }, [userId]);
 
@@ -701,13 +726,15 @@ export function useEntries() {
     if (!entry) return;
     assertCurrent();
     const deletedAt = new Date().toISOString();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("entries")
       .update(toEntryRow({ deletedAt }))
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id");
     assertCurrent();
     if (error) throw new Error(error.message);
+    assertRowWritten(data);
     set({
       entries: state.entries.filter((e) => e.id !== id),
       deletedEntries: [...state.deletedEntries, { ...entry, deletedAt }].sort(byNewest),
@@ -723,13 +750,15 @@ export function useEntries() {
     };
     const entry = state.deletedEntries.find((e) => e.id === id);
     if (!entry) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("entries")
       .update(toEntryRow({ deletedAt: undefined }))
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id");
     assertCurrent();
     if (error) throw new Error(error.message);
+    assertRowWritten(data);
     set({
       entries: [...state.entries, { ...entry, deletedAt: undefined }].sort(byNewest),
       deletedEntries: state.deletedEntries.filter((e) => e.id !== id),
@@ -907,7 +936,14 @@ export const uid = () =>
  * Format: `pbkdf2$<iterations>$<saltHex>$<hashHex>`.
  */
 const PASSCODE_SCHEME = "pbkdf2";
+// Must stay equal to PASSCODE_ITERATIONS in mobile/lib/passcode.ts: both trees
+// write the same `profiles.passcode` row and there is no shared module between
+// them. Only ever raise this.
 const PASSCODE_ITERATIONS = 210_000;
+// The most a *stored* row may ask us to run, so a corrupt or hostile row cannot
+// stall the lock screen inside the derivation. Leaves room for one future raise
+// of PASSCODE_ITERATIONS; anything above this fails closed instead of deriving.
+const PASSCODE_MAX_ITERATIONS = 600_000;
 const PASSCODE_SALT_BYTES = 16;
 const PASSCODE_HASH_BITS = 256;
 
@@ -937,6 +973,19 @@ export function isLegacyPasscode(stored: string): boolean {
   return /^\d{4}$/.test(stored);
 }
 
+/**
+ * Weaker rows still verify once, then get rewritten at the current strength.
+ * Upgrade-only on purpose: a row already at or above PASSCODE_ITERATIONS is left
+ * alone, so unlocking can never lower what the other client stored.
+ */
+export function needsPasscodeUpgrade(stored: string): boolean {
+  if (isLegacyPasscode(stored)) return true;
+  const [scheme, rawIterations] = stored.split("$");
+  if (scheme !== PASSCODE_SCHEME) return false;
+  const iterations = Number(rawIterations);
+  return Number.isInteger(iterations) && iterations < PASSCODE_ITERATIONS;
+}
+
 /** Hash a code for storage, with a fresh random salt. */
 export async function hashPasscode(code: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(PASSCODE_SALT_BYTES));
@@ -951,7 +1000,8 @@ export async function verifyPasscode(code: string, stored: string): Promise<bool
   const [scheme, rawIterations, saltHex, hashHex, extra] = stored.split("$");
   if (scheme !== PASSCODE_SCHEME || !saltHex || !hashHex) return false;
   const iterations = Number(rawIterations);
-  if (extra !== undefined || !Number.isInteger(iterations) || iterations <= 0 || iterations > 1_000_000) return false;
+  if (extra !== undefined || !Number.isInteger(iterations) || iterations <= 0) return false;
+  if (iterations > PASSCODE_MAX_ITERATIONS) return false;
   if (!/^[0-9a-f]{32}$/.test(saltHex) || !/^[0-9a-f]{64}$/.test(hashHex)) return false;
   const candidate = await derive(code, fromHex(saltHex), iterations);
   // Constant-time-ish compare; both strings are the same fixed length here.

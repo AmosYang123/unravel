@@ -65,6 +65,9 @@ const AuthPage = () => {
   // resend appears on the sign-in form itself rather than a generic error.
   const [needsConfirming, setNeedsConfirming] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // Ticked once per visit, never persisted. Gates signup and the guest path
+  // only — sign-in already proves they've been through this before.
+  const [agreed, setAgreed] = useState(false);
   const passwordRef = useRef<HTMLDivElement | null>(null);
 
   const from = sanitizeRedirect((location.state as { from?: unknown } | null)?.from);
@@ -80,6 +83,9 @@ const AuthPage = () => {
   }, [cooldown]);
 
   const emailLooksUsable = email.trim().length > 3;
+  // Sign-in is never gated on this — only creating an account or starting a
+  // fresh guest journal need the acknowledgement.
+  const signupGated = mode === "signup" && !agreed;
   const canSubmit =
     emailLooksUsable &&
     (mode === "forgot" ||
@@ -201,6 +207,36 @@ const AuthPage = () => {
 
   const resendLabel =
     cooldown > 0 ? `Send it again in ${cooldown}s` : busy ? "Sending…" : "Send it again";
+
+  // Shown above whichever primary action needs it (signup or guest), never
+  // both at once since the two live in different modes.
+  const ackRow = (
+    <div className="flex items-center gap-3">
+      <input
+        id="privacy-ack"
+        type="checkbox"
+        checked={agreed}
+        onChange={(e) => setAgreed(e.target.checked)}
+        aria-labelledby="privacy-ack-label-lead privacy-ack-link privacy-ack-label-trail"
+        className="h-5 w-5 shrink-0 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      />
+      <span className="text-sm text-muted-foreground">
+        {/* Two separate <label>s, one on each side of the <a>, so the words
+            toggle the checkbox while the link stays clickable on its own —
+            wrapping the <a> in a <label> is deliberately avoided because
+            nested-anchor click forwarding is inconsistent across browsers. */}
+        <label htmlFor="privacy-ack" id="privacy-ack-label-lead" className="cursor-pointer">
+          I've read the{" "}
+        </label>
+        <a href="/privacy" id="privacy-ack-link" className="text-foreground underline">
+          privacy policy
+        </a>
+        <label htmlFor="privacy-ack" id="privacy-ack-label-trail" className="cursor-pointer">
+          .
+        </label>
+      </span>
+    </div>
+  );
 
   if (mode === "sent") {
     return (
@@ -355,9 +391,11 @@ const AuthPage = () => {
           {error && <p className="text-sm text-destructive">{error}</p>}
           {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
+          {mode === "signup" && ackRow}
+
           <Button
             type="submit"
-            disabled={!canSubmit || busy || authLoading}
+            disabled={!canSubmit || busy || authLoading || signupGated}
             className="h-12 w-full rounded-full"
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -367,19 +405,20 @@ const AuthPage = () => {
 
         {mode === "signin" && guestEnabled && (
           <div className="mt-6 border-t pt-6">
+            {ackRow}
             <Button
               type="button"
               variant="ghost"
-              disabled={busy || authLoading}
+              disabled={busy || authLoading || !agreed}
               onClick={() => void continueAsGuest()}
-              className="h-12 w-full rounded-full"
+              className="mt-4 h-12 w-full rounded-full"
             >
               Continue as guest
             </Button>
             {guestError && <p className="mt-3 text-sm text-destructive">{guestError}</p>}
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-              A guest journal has no email attached, so it stays on this device and can't be brought
-              back if you lose access. You can add an email later in settings.
+              A guest journal has no email attached, so there's no way to sign back in — it's tied
+              to this install and lost if you remove the app. You can add an email later in settings.
             </p>
           </div>
         )}

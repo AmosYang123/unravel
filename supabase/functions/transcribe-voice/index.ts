@@ -4,6 +4,10 @@ import { z } from "npm:zod@3";
 
 const SUMMARY_THRESHOLD_SECONDS = 300; // 5 minutes
 const TEXT_MODEL = "openai/gpt-oss-20b";
+// Both recorders stop at 300s, which is roughly 5 MB at the ~128 kbps they
+// record. 25 MB is also Groq's own upload ceiling, so anything larger could
+// never be transcribed — reject it before it costs memory or a provider call.
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 // Browser origins allowed to call this function. Pinned so a random page cannot
 // drive a signed-in user's session.
@@ -45,7 +49,10 @@ Deno.serve(async (req) => {
     if (!authHeader) return json({ error: "Not signed in." }, 401);
 
     const groqKey = Deno.env.get("GROQ_API_KEY");
-    if (!groqKey) return json({ error: "Transcription is not configured." }, 500);
+    if (!groqKey) {
+      console.error("transcribe-voice: GROQ_API_KEY is not configured");
+      return json({ error: GENERIC_ERROR }, 500);
+    }
 
     // The user's own token: row-level security decides what they can reach.
     const supabase = createClient(
@@ -95,6 +102,7 @@ Deno.serve(async (req) => {
       .download(entry.audio_path);
     if (downloadError || !file) return json({ error: "The recording could not be read." }, 400);
     if (file.size < 2048) return json({ error: "That recording is too short to transcribe." }, 400);
+    if (file.size > MAX_AUDIO_BYTES) return json({ error: "That recording is too large to transcribe." }, 400);
 
     const ext = entry.audio_path.split(".").pop()?.toLowerCase() || "webm";
     const form = new FormData();

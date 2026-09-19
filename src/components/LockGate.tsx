@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { hashPasscode, isLegacyPasscode, useSettings, verifyPasscode } from "@/lib/store";
+import { hashPasscode, needsPasscodeUpgrade, useSettings, verifyPasscode } from "@/lib/store";
 
 /** Wrong attempts allowed before the next try has to wait. */
 const FREE_ATTEMPTS = 2;
@@ -57,13 +57,15 @@ const LockGate = ({ children }: { children: React.ReactNode }) => {
         setCode("");
         setWrong(false);
         attempts.current = 0;
-        // Quietly move a pre-hashing row onto a hash now that we know the code.
-        if (isLegacyPasscode(stored)) {
-          try {
+        // Quietly move a pre-hashing or weaker row onto the current hash now
+        // that we know the code. Upgrade-only, and never at the cost of the
+        // unlock itself.
+        try {
+          if (needsPasscodeUpgrade(stored)) {
             await updateRef.current({ passcode: await hashPasscode(code) });
-          } catch (err) {
-            console.error("Passcode upgrade failed", err);
           }
+        } catch (err) {
+          console.error("Passcode upgrade failed", err);
         }
         return;
       }

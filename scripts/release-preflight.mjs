@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
-import { releaseConfig, validateReleaseConfig, validateReleaseEnvironment } from "../mobile/lib/release-config.ts";
+import { releaseConfig, validateEasConfig, validateReleaseConfig, validateReleaseEnvironment } from "../mobile/lib/release-config.ts";
 
 const requirements = {
   backend: "Apply migrations, deploy functions, and record a successful live disposable-account deletion and consent test.",
@@ -19,6 +19,11 @@ for (const path of ["../.env", "../.env.local", "../mobile/.env", "../mobile/.en
   catch (error) { if (error.code !== "ENOENT") errors.push(`Cannot read ${path}; check file format and permissions.`); }
 }
 errors.push(...validateReleaseEnvironment({ ...env, ...process.env }));
+try {
+  errors.push(...validateEasConfig(JSON.parse(readFileSync(new URL("../mobile/eas.json", import.meta.url), "utf8"))));
+} catch (error) {
+  errors.push(error.code === "ENOENT" ? "Create mobile/eas.json with build profiles for preview and production." : "Cannot read mobile/eas.json; check file format and permissions.");
+}
 let evidence = {};
 try {
   evidence = JSON.parse(readFileSync(new URL("../release-evidence.json", import.meta.url), "utf8"));

@@ -71,6 +71,20 @@ const MAX_REQUESTS = 12;
 const REQUEST_TIMEOUT_MS = 4000;
 const CONCURRENCY = 4;
 
+// Every URL below is third-party data: `url` reaches an <a href> on the web
+// and Linking.openURL on mobile, so a `javascript:` link Deezer handed back
+// would run in the signed-in user's session. article-recs already pins its
+// results to https; hold this function to the same rule instead of trusting
+// whatever the API returns.
+const httpsUrl = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  try {
+    return new URL(value).protocol === "https:" ? value : null;
+  } catch {
+    return null;
+  }
+};
+
 const RATE_LIMITED = "Deezer is rate limiting right now — try again shortly.";
 const UPSTREAM_FAILED = "Deezer didn't return anything for those preferences.";
 
@@ -170,6 +184,14 @@ const corsFor = (req: Request) => {
   };
 };
 
+// Counted in Postgres: edge instances are ephemeral, so in-memory counters reset.
+// Deezer's ~50 requests / 5s ceiling is shared by every user behind this egress
+// IP, so one account is held to the same 20/hr the other provider-touching
+// functions use: at MAX_REQUESTS each that is 240 Deezer calls an hour, well
+// under the shared budget, while still covering a long session of writing.
+const RATE_LIMIT = 20;
+const RATE_WINDOW_SECONDS = 3600;
+
 const GENERIC_ERROR = "Something went wrong. Try again in a moment.";
 
 const stringList = z.array(z.unknown()).optional();
@@ -211,6 +233,19 @@ Deno.serve(async (req) => {
 
     if (!await hasSharingConsent(supabase, auth.user.id)) {
       return json({ error: "Enable AI suggestions in Settings after reviewing the data-sharing notice to use this feature." }, 403);
+    }
+
+    const { data: allowed, error: rateError } = await supabase.rpc("consume_rate_limit", {
+      p_bucket: "spotify-songs",
+      p_limit: RATE_LIMIT,
+      p_window_seconds: RATE_WINDOW_SECONDS,
+    });
+    if (rateError) {
+      console.error("spotify-songs rate limit check failed:", rateError.message);
+      return json({ error: GENERIC_ERROR }, 503);
+    }
+    if (!allowed) {
+      return json({ error: "Too many requests right now — try again in a moment." }, 429);
     }
 
     const parsedBody = bodySchema.safeParse(await req.json().catch(() => null));
@@ -268,9 +303,9 @@ Deno.serve(async (req) => {
         artist: track.artist?.name ?? "Unknown",
         genre,
         reason,
-        url: track.link ?? `https://www.deezer.com/track/${id}`,
-        previewUrl: track.preview && track.preview.length > 0 ? track.preview : null,
-        albumArt: track.album?.cover_medium ?? track.album?.cover_big ?? null,
+        url: httpsUrl(track.link) ?? `https://www.deezer.com/track/${id}`,
+        previewUrl: httpsUrl(track.preview),
+        albumArt: httpsUrl(track.album?.cover_medium) ?? httpsUrl(track.album?.cover_big),
         // Deezer's track search carries no release date. Left off entirely
         // rather than defaulted, so nothing downstream renders a fake one.
         src,

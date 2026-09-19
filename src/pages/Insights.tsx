@@ -99,7 +99,7 @@ const Insights = () => {
         <h1 className="page-title">Patterns</h1>
         <div className="page-underline mt-3" />
         <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-          Calculated on this device, only from moods and tags you chose.{" "}
+          Calculated only from moods and tags you chose.{" "}
           <span className="mark">Your writing is never analyzed.</span>
         </p>
       </header>

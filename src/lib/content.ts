@@ -171,7 +171,7 @@ export const MODE_META: Record<
   },
   voice: {
     label: "Talk",
-    blurb: "Say it out loud. Stays on this device.",
+    blurb: "Say it out loud. Saved to your private account.",
     minutes: "1–5 min",
     icon: Mic,
     hueRotate: 103,

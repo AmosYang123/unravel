@@ -103,7 +103,7 @@ export default function InsightsScreen() {
           <PageTitle>Patterns</PageTitle>
           <PageUnderline style={styles.underline} />
           <Text style={[styles.intro, { color: theme.colors.mutedForeground }]}>
-            Calculated on this device, only from moods and tags you chose.{" "}
+            Calculated only from moods and tags you chose.{" "}
             <Text style={{ color: theme.colors.foreground, fontFamily: fonts.bodySemiBold }}>
               Your writing is never analyzed.
             </Text>

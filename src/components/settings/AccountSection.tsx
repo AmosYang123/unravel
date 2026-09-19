@@ -4,6 +4,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { MIN_PASSWORD_LENGTH, describeAuthError, passwordMeetsRule } from "@/lib/password";
@@ -23,6 +34,8 @@ const AccountSection = () => {
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
 
   // Supabase marks anonymous sessions with is_anonymous on the user object.
   const isGuest = user?.is_anonymous === true;
@@ -52,6 +65,21 @@ const AccountSection = () => {
       setUpgradePassword("");
     }
     setUpgrading(false);
+  };
+
+  const deleteAccount = async () => {
+    if (deletingAccount) return;
+    setDeletingAccount(true);
+    setDeleteAccountError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ deleted: boolean }>("delete-account");
+      if (error || data?.deleted !== true) throw error ?? new Error("Account deletion was not confirmed. Please try again.");
+      await signOut();
+    } catch (err) {
+      console.error("Account deletion failed", err);
+      setDeleteAccountError(err instanceof Error ? err.message : "We couldn't delete your account. Please try again.");
+      setDeletingAccount(false);
+    }
   };
 
   useEffect(() => {
@@ -198,6 +226,35 @@ const AccountSection = () => {
               Sign out
             </Button>
           </Row>
+          <Row
+            title="Delete account"
+            description="Permanently deletes your entries, recordings, preferences and account. This can't be undone."
+          >
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="rounded-full text-destructive hover:text-destructive"
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? "Deleting…" : "Delete account"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Every entry, voice recording and preference will be permanently deleted. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep my account</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void deleteAccount()}>Delete forever</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </Row>
+          {deleteAccountError && <p className="text-sm text-destructive">{deleteAccountError}</p>}
         </div>
       </Dialog>
     </>

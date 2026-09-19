@@ -6,12 +6,12 @@ import { RequireAuth } from "../src/App";
 const mocks = vi.hoisted(() => ({
   auth: { session: { user: { id: "one" } }, loading: false, signOut: vi.fn() },
   profile: { settings: { lockEnabled: false, passcode: "", onboardedAt: "done" }, loading: false, error: null as string | null, update: vi.fn() },
-  verify: vi.fn(), load: vi.fn(),
+  verify: vi.fn(), load: vi.fn(), hash: vi.fn(), needsUpgrade: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => mocks.auth, AuthProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/lib/store", () => ({
   useSettings: () => mocks.profile, applyAppearance: vi.fn(), loadUserData: mocks.load,
-  verifyPasscode: mocks.verify, hashPasscode: vi.fn(), isLegacyPasscode: () => false,
+  verifyPasscode: mocks.verify, hashPasscode: mocks.hash, needsPasscodeUpgrade: mocks.needsUpgrade,
 }));
 function TestApp() {
   return <MemoryRouter><Routes><Route element={<RequireAuth />}>
@@ -27,6 +27,9 @@ beforeEach(() => {
   mocks.profile.loading = false;
   mocks.profile.error = null;
   mocks.verify.mockReset();
+  mocks.hash.mockReset();
+  mocks.needsUpgrade.mockReset();
+  mocks.profile.update.mockClear();
 });
 describe("entry gates", () => {
   it("does not expose the journal before onboarding is known", async () => {
@@ -86,5 +89,40 @@ describe("entry gates", () => {
     }
     expect(screen.getByRole("status").textContent).toContain("Wait 5s");
     expect((screen.getByLabelText("Passcode") as HTMLInputElement).disabled).toBe(true);
+  });
+  it("upgrades a weak stored passcode after a correct unlock", async () => {
+    mocks.profile.settings.lockEnabled = true;
+    mocks.profile.settings.passcode = "1234";
+    mocks.verify.mockResolvedValue(true);
+    mocks.needsUpgrade.mockReturnValue(true);
+    mocks.hash.mockResolvedValue("scrypt$upgraded");
+    render(<TestApp />);
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "1234" } });
+    await screen.findByText("Private journal");
+    await waitFor(() => expect(mocks.profile.update).toHaveBeenCalledWith({ passcode: "scrypt$upgraded" }));
+    expect(mocks.hash).toHaveBeenCalledWith("1234");
+  });
+  it("does not touch the stored passcode when no upgrade is needed", async () => {
+    mocks.profile.settings.lockEnabled = true;
+    mocks.profile.settings.passcode = "hash";
+    mocks.verify.mockResolvedValue(true);
+    mocks.needsUpgrade.mockReturnValue(false);
+    render(<TestApp />);
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "1234" } });
+    await screen.findByText("Private journal");
+    expect(mocks.hash).not.toHaveBeenCalled();
+    expect(mocks.profile.update).not.toHaveBeenCalled();
+  });
+  it("does not upgrade the passcode on a wrong entry", async () => {
+    mocks.profile.settings.lockEnabled = true;
+    mocks.profile.settings.passcode = "1234";
+    mocks.verify.mockResolvedValue(false);
+    mocks.needsUpgrade.mockReturnValue(true);
+    render(<TestApp />);
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "0000" } });
+    await waitFor(() => expect((screen.getByLabelText("Passcode") as HTMLInputElement).value).toBe(""));
+    expect(screen.queryByText("Private journal")).toBeNull();
+    expect(mocks.hash).not.toHaveBeenCalled();
+    expect(mocks.profile.update).not.toHaveBeenCalled();
   });
 });

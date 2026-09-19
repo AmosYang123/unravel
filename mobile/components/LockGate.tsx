@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, AppState, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Lock } from "lucide-react-native";
 import { Button } from "./ui";
 import { useAuth } from "../lib/auth";
@@ -12,6 +13,9 @@ import type { FontSet } from "@/theme/tokens";
 const FREE_ATTEMPTS = 2;
 const BASE_DELAY_MS = 5000;
 const MAX_DELAY_MS = 30000;
+
+/** The count and the wait live on the device, so force-quitting cannot reset them. */
+const THROTTLE_KEY = "quiet.lockThrottle.v1";
 
 const delayFor = (wrongAttempts: number) => {
   if (wrongAttempts <= FREE_ATTEMPTS) return 0;
@@ -39,10 +43,29 @@ export default function LockGate({ children }: { children: ReactNode }) {
   const [waitSeconds, setWaitSeconds] = useState(0);
   const blockedUntil = useRef(0);
   const attempts = useRef(0);
+  // AsyncStorage has no synchronous read, so no code is checked until the saved
+  // throttle is back: a relaunch must not hand out a free attempt.
+  const [throttleLoaded, setThrottleLoaded] = useState(false);
   const updateRef = useRef(update);
   updateRef.current = update;
 
   const locked = settings.lockEnabled && settings.passcode.length > 0 && !unlocked;
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(THROTTLE_KEY);
+        const saved = raw ? (JSON.parse(raw) as { attempts?: number; blockedUntil?: number }) : null;
+        attempts.current = Number(saved?.attempts) || 0;
+        blockedUntil.current = Number(saved?.blockedUntil) || 0;
+        const left = Math.ceil((blockedUntil.current - Date.now()) / 1000);
+        if (left > 0) setWaitSeconds(left);
+      } catch {
+        // An unreadable throttle just starts the count over.
+      }
+      setThrottleLoaded(true);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!checking) {
@@ -59,7 +82,9 @@ export default function LockGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next !== "background") return;
+      // iOS takes its app-switcher snapshot at "inactive", before "background",
+      // so the gate has to close by then or the journal ends up in the switcher.
+      if (next !== "background" && next !== "inactive") return;
       setUnlocked(false);
       setCode("");
       setChecking(false);
@@ -70,7 +95,7 @@ export default function LockGate({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!locked || code.length !== 4) return;
+    if (!locked || code.length !== 4 || !throttleLoaded) return;
     if (Date.now() < blockedUntil.current) return;
     let cancelled = false;
 
@@ -96,12 +121,17 @@ export default function LockGate({ children }: { children: ReactNode }) {
         setCode("");
         setWrong(false);
         attempts.current = 0;
-        if (needsPasscodeUpgrade(stored)) {
-          try {
+        blockedUntil.current = 0;
+        await AsyncStorage.removeItem(THROTTLE_KEY).catch(() => {});
+        // Quietly move a pre-hashing or weaker row onto the current hash now
+        // that we know the code. Upgrade-only, and never at the cost of the
+        // unlock itself.
+        try {
+          if (needsPasscodeUpgrade(stored)) {
             await updateRef.current({ passcode: await hashPasscode(code) });
-          } catch (err) {
-            console.error("Passcode upgrade failed", err);
           }
+        } catch (err) {
+          console.error("Passcode upgrade failed", err);
         }
         return;
       }
@@ -113,12 +143,16 @@ export default function LockGate({ children }: { children: ReactNode }) {
         blockedUntil.current = Date.now() + delay;
         setWaitSeconds(Math.ceil(delay / 1000));
       }
+      await AsyncStorage.setItem(
+        THROTTLE_KEY,
+        JSON.stringify({ attempts: attempts.current, blockedUntil: blockedUntil.current }),
+      ).catch(() => {});
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [code, settings.passcode, locked]);
+  }, [code, settings.passcode, locked, throttleLoaded]);
 
   useEffect(() => {
     if (waitSeconds <= 0) return;

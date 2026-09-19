@@ -5,7 +5,7 @@ import SupportContact from "@/components/SupportContact";
 export default function Privacy() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <Link to="/" className="text-sm underline">Back to Unravel</Link>
+      <Link to="/auth" className="text-sm underline">Back to Unravel</Link>
       <h1 className="page-title mt-8">Privacy policy</h1>
       <p className="mt-3 text-sm text-muted-foreground">Updated September 12, 2026</p>
       {PRIVACY_SECTIONS.map(({ title, text }) => (
@@ -22,6 +22,7 @@ export default function Privacy() {
           The complete bundled licenses are available for <a className="underline" href="/licenses/Fraunces-LICENSE.txt">Fraunces</a> and <a className="underline" href="/licenses/Karla-LICENSE.txt">Karla</a>.
         </p>
       </details>
+      <Link to="/auth" className="inline-block mt-8 text-sm underline">Back to Unravel</Link>
     </main>
   );
 }

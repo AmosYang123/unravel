@@ -566,7 +566,6 @@ function AccountSection() {
   const [devNotice, setDevNotice] = useState<string | null>(null);
 
   const isGuest = user?.is_anonymous === true;
-  const isDeveloper = user?.email?.toLowerCase() === "amosyangg@icloud.com";
   const canUpgrade = upgradeEmail.trim().length > 3 && passwordMeetsRule(upgradePassword) && !upgrading;
 
   useEffect(() => {
@@ -791,12 +790,12 @@ function AccountSection() {
           </>
         )}
 
-        {isDeveloper && (
+        {isAdmin && (
           <>
             <Divider />
             <Text style={[styles.subLabel, { color: theme.colors.foreground }]}>Developer controls</Text>
             <Text style={[styles.rowDescription, { color: theme.colors.mutedForeground }]}>
-              These affect every test account except amosyangg@icloud.com.
+              These affect every test account except your own.
             </Text>
             <Row title="Reset test accounts" description="Delete their entries and recordings, then clear their setup preferences while keeping the accounts.">
               <Button label={devBusy ? "Working…" : "Reset all"} variant="ghost" disabled={devBusy} onPress={() => setDevAction("reset")} />
@@ -811,7 +810,7 @@ function AccountSection() {
               visible={devAction !== null}
               title={devAction === "delete" ? "Delete every test account?" : "Reset every test account?"}
               description={devAction === "delete"
-                ? "Every account except amosyangg@icloud.com and all of their data will be permanently deleted. This cannot be undone."
+                ? "Every account except your own and all of their data will be permanently deleted. This cannot be undone."
                 : "Every other account will keep its sign-in, but its entries, recordings and setup will be permanently cleared."}
               confirmLabel={devAction === "delete" ? "Delete all" : "Reset all"}
               cancelLabel="Cancel"

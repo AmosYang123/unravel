@@ -2,8 +2,9 @@
 // independently of whether a modified client chooses to display the buttons.
 import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2";
 
-const DEV_EMAIL = "amosyangg@icloud.com";
 const BATCH_SIZE = 100;
+/** How far below `<uid>/` a recording may sit before cleanup gives up. */
+const MAX_FOLDER_DEPTH = 8;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -20,13 +21,26 @@ async function allUsers(admin: SupabaseClient): Promise<User[]> {
   }
 }
 
+// `list()` only returns the immediate children of a prefix, but the storage insert
+// policy allows writing to any depth under `<uid>/`, so a nested recording would
+// survive the cleanup. Walk into every folder entry (no `id`) instead.
 async function removeRecordings(admin: SupabaseClient, userId: string): Promise<void> {
   const paths: string[] = [];
-  for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await admin.storage.from("voice-memos").list(userId, { limit: 1000, offset });
-    if (error) throw error;
-    paths.push(...(data ?? []).filter((item) => item.id).map((item) => `${userId}/${item.name}`));
-    if (!data || data.length < 1000) break;
+  const pending: { prefix: string; depth: number }[] = [{ prefix: userId, depth: 0 }];
+  while (pending.length) {
+    const { prefix, depth } = pending.pop()!;
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await admin.storage.from("voice-memos").list(prefix, { limit: 1000, offset });
+      if (error) throw error;
+      for (const item of data ?? []) {
+        if (item.id) paths.push(`${prefix}/${item.name}`);
+        // A hostile tree must not spin the function forever; anything deeper than
+        // real `<uid>/<uuid>.<ext>` paths fails the action instead of being skipped.
+        else if (depth >= MAX_FOLDER_DEPTH) throw new Error(`Recording tree too deep: ${prefix}`);
+        else pending.push({ prefix: `${prefix}/${item.name}`, depth: depth + 1 });
+      }
+      if (!data || data.length < 1000) break;
+    }
   }
   for (let index = 0; index < paths.length; index += BATCH_SIZE) {
     const { error } = await admin.storage.from("voice-memos").remove(paths.slice(index, index + BATCH_SIZE));
@@ -48,7 +62,15 @@ Deno.serve(async (req) => {
   const caller = createClient(url, anonKey, { global: { headers: { Authorization: authorization } } });
   const { data: auth, error: authError } = await caller.auth.getUser();
   if (authError || !auth.user) return json({ error: "Your session expired. Sign in again." }, 401);
-  if (auth.user.email?.toLowerCase() !== DEV_EMAIL) return json({ error: "Developer access required." }, 403);
+  // Read the caller's own admin row through their JWT: the own-row SELECT policy on
+  // user_roles permits exactly this, while has_role() is not executable by authenticated.
+  const { data: adminRole, error: roleError } = await caller
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", auth.user.id)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (roleError || !adminRole) return json({ error: "Developer access required." }, 403);
 
   let requestBody: unknown;
   try {

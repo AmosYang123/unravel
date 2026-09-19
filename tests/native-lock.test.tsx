@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-const state = vi.hoisted(() => ({ appState: undefined as ((next: string) => void) | undefined, verify: vi.fn(), signOut: vi.fn() }));
+const state = vi.hoisted(() => ({ appState: undefined as ((next: string) => void) | undefined, verify: vi.fn(), signOut: vi.fn(), update: vi.fn(), upgrade: false, storage: new Map<string, string>() }));
+vi.mock("../mobile/node_modules/@react-native-async-storage/async-storage", () => ({ default: {
+  getItem: async (key: string) => state.storage.get(key) ?? null,
+  setItem: async (key: string, value: string) => void state.storage.set(key, value),
+  removeItem: async (key: string) => void state.storage.delete(key),
+} }));
 vi.mock("../mobile/node_modules/react-native", async () => {
   const React = await import("react");
   return {
@@ -19,11 +24,12 @@ vi.mock("../mobile/components/ui", () => ({ Button: ({ label, onPress, disabled 
 vi.mock("../mobile/lib/auth", () => ({ useAuth: () => ({ user: { email: "person@example.com" }, signOut: state.signOut }) }));
 vi.mock("@/theme/ThemeProvider", () => ({ useTheme: () => ({ theme: { colors: {} } }), useStyles: () => ({}) }));
 vi.mock("@/lib/store", () => ({
-  useSettings: () => ({ settings: { lockEnabled: true, passcode: "hash" }, update: vi.fn() }),
-  verifyPasscode: state.verify, needsPasscodeUpgrade: () => false, hashPasscode: vi.fn(),
+  useSettings: () => ({ settings: { lockEnabled: true, passcode: "hash" }, update: state.update }),
+  verifyPasscode: state.verify, needsPasscodeUpgrade: () => state.upgrade, hashPasscode: async (code: string) => `hashed:${code}`,
 }));
 import LockGate from "../mobile/components/LockGate";
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+const THROTTLE_KEY = "quiet.lockThrottle.v1";
+afterEach(() => { cleanup(); vi.clearAllMocks(); state.upgrade = false; state.storage.clear(); });
 it("keeps the journal unmounted until unlock, then preserves the editor when relocking", async () => {
   const mount = vi.fn();
   const unmount = vi.fn();
@@ -54,6 +60,49 @@ it("shows the account, progress, and account switch while checking", async () =>
   expect(await screen.findByText("Checking your code…")).toBeTruthy();
   expect((screen.getByRole("button", { name: "Switch account" }) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => finish?.(true));
+});
+
+it("re-locks at inactive, before iOS snapshots the app switcher", async () => {
+  state.verify.mockResolvedValue(true);
+  render(<LockGate><p>Journal</p></LockGate>);
+  await act(async () => fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "1234" } }));
+  expect(screen.getByText("Journal").parentElement?.style.display).toBe("flex");
+  act(() => state.appState?.("inactive"));
+  expect(screen.getByText("Journal").parentElement?.style.display).toBe("none");
+});
+
+it("rewrites a weaker row after unlocking and leaves a current one alone", async () => {
+  state.verify.mockResolvedValue(true);
+  state.upgrade = true;
+  render(<LockGate><p>Journal</p></LockGate>);
+  await act(async () => fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "1234" } }));
+  expect(state.update).toHaveBeenCalledWith({ passcode: "hashed:1234" });
+  cleanup();
+  state.upgrade = false;
+  state.update.mockClear();
+  render(<LockGate><p>Journal</p></LockGate>);
+  await act(async () => fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "1234" } }));
+  expect(state.update).not.toHaveBeenCalled();
+});
+
+it("keeps the attempt throttle across a relaunch", async () => {
+  state.verify.mockResolvedValue(false);
+  render(<LockGate><p>Journal</p></LockGate>);
+  for (let i = 0; i < 3; i++) {
+    await act(async () => fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "0000" } }));
+  }
+  expect(screen.getByText(/Too many tries/)).toBeTruthy();
+  expect(JSON.parse(state.storage.get(THROTTLE_KEY) ?? "{}").attempts).toBe(3);
+  cleanup(); // force-quit, then a cold start with the same storage
+  render(<LockGate><p>Journal</p></LockGate>);
+  expect(await screen.findByText(/Too many tries/)).toBeTruthy();
+  expect((screen.getByLabelText("Passcode") as HTMLInputElement).disabled).toBe(true);
+  state.verify.mockResolvedValue(true);
+  state.storage.set(THROTTLE_KEY, JSON.stringify({ attempts: 3, blockedUntil: 0 }));
+  cleanup();
+  render(<LockGate><p>Journal</p></LockGate>);
+  await act(async () => fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "1234" } }));
+  expect(state.storage.has(THROTTLE_KEY)).toBe(false);
 });
 
 it("switches accounts from the lock screen", () => {

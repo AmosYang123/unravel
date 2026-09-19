@@ -2,6 +2,9 @@
 // the existing foreign-key cascades), and voice recordings owned by them.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+/** How far below `<uid>/` a recording may sit before cleanup gives up. */
+const MAX_FOLDER_DEPTH = 8;
+
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "http://localhost:5173,http://localhost:8080,http://localhost:8081")
   .split(",").map((origin) => origin.trim()).filter(Boolean);
 
@@ -30,17 +33,33 @@ Deno.serve(async (req) => {
   if (authError || !auth.user) return json({ error: "Your session expired. Sign in and try again." }, 401);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+  // `list()` only returns the immediate children of a prefix, but the storage insert
+  // policy allows writing to any depth under `<uid>/`, so a nested recording would
+  // outlive the account. Walk into every folder entry (no `id`) instead.
   const paths: string[] = [];
-  for (let offset = 0; ; offset += 1000) {
-    const { data: recordings, error: listError } = await admin.storage
-      .from("voice-memos")
-      .list(auth.user.id, { limit: 1000, offset });
-    if (listError) {
-      console.error("delete-account recording list failed", listError.message);
-      return json({ error: "Recording cleanup did not finish. Your account has not been deleted. Please try again." }, 500);
+  const pending: { prefix: string; depth: number }[] = [{ prefix: auth.user.id, depth: 0 }];
+  while (pending.length) {
+    const { prefix, depth } = pending.pop()!;
+    for (let offset = 0; ; offset += 1000) {
+      const { data: recordings, error: listError } = await admin.storage
+        .from("voice-memos")
+        .list(prefix, { limit: 1000, offset });
+      if (listError) {
+        console.error("delete-account recording list failed", listError.message);
+        return json({ error: "Recording cleanup did not finish. Your account has not been deleted. Please try again." }, 500);
+      }
+      for (const item of recordings ?? []) {
+        if (item.id) paths.push(`${prefix}/${item.name}`);
+        // A hostile tree must not spin the function forever. Real paths are
+        // `<uid>/<uuid>.<ext>`, so anything this deep is reported rather than
+        // silently left behind.
+        else if (depth >= MAX_FOLDER_DEPTH) {
+          console.error("delete-account recording tree too deep", prefix);
+          return json({ error: "Recording cleanup did not finish. Your account has not been deleted. Please try again." }, 500);
+        } else pending.push({ prefix: `${prefix}/${item.name}`, depth: depth + 1 });
+      }
+      if (!recordings || recordings.length < 1000) break;
     }
-    paths.push(...(recordings ?? []).filter((item) => item.id).map((item) => `${auth.user.id}/${item.name}`));
-    if (!recordings || recordings.length < 1000) break;
   }
   for (let index = 0; index < paths.length; index += 1000) {
     const { error: removeError } = await admin.storage.from("voice-memos").remove(paths.slice(index, index + 1000));

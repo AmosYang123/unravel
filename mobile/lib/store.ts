@@ -2,7 +2,8 @@ import { useCallback, useEffect, useReducer } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import type { Addendum, Entry, NewEntry, Settings, SongSuggestion, SongSuggestions, SupportPlan, ThemeName } from "./types";
+import type { Addendum, Entry, EntryMode, NewEntry, Settings, SongSuggestion, SongSuggestions, SupportPlan, ThemeName } from "./types";
+import { draftKey } from "./drafts";
 import { isYearLevel } from "./onboarding";
 import { uid } from "./passcode";
 
@@ -164,6 +165,12 @@ const toEntry = (row: EntryRow): Entry => ({
 
 /** Newest first, the order the journal is read in everywhere. */
 const byNewest = (a: Entry, b: Entry) => b.createdAt.localeCompare(a.createdAt);
+
+/** A filter that matches nothing is not an error to Supabase, so an update that
+    touched no row comes back clean and the UI reports a save that never happened. */
+const assertRowWritten = (rows: { id: string }[] | null) => {
+  if (!rows?.length) throw new Error("That entry is no longer there. It may have been deleted on another device.");
+};
 
 const toEntryRow = (patch: Partial<Entry>): EntryUpdate => {
   const row: EntryUpdate = {};
@@ -434,13 +441,27 @@ async function purgeExpiredDeletes(userId: string, deleted: Entry[]) {
   set({ deletedEntries: state.deletedEntries.filter((e) => !ids.includes(e.id)) });
 }
 
+/** Every entry mode, so sign-out can sweep the per-mode local keys. Written as a
+    `satisfies` map so a newly added mode is a type error, not a draft left behind. */
+const ENTRY_MODES = Object.keys({
+  longform: 1, short: 1, bullets: 1, voice: 1, mood: 1, prompt: 1, gratitude: 1,
+} satisfies Record<EntryMode, 1>) as EntryMode[];
+
+/** The per-user local keys that hold unfinished writing: the draft itself and the
+    slider positions the editor remembers beside it. */
+const localUserKeys = (userId: string | null): string[] =>
+  userId ? ENTRY_MODES.flatMap((mode) => [draftKey(mode, userId), `quiet.sliders.${userId}.${mode}.v2`]) : [];
+
 /**
- * Drops in-memory state first, then clears the on-device legacy copies.
+ * Drops in-memory state first, then clears the on-device copies.
  * AsyncStorage has no synchronous remove, so the wipe is fire-and-forget:
- * signOut stays synchronous for callers and never blocks on storage.
+ * signOut stays synchronous for callers and never blocks on storage. A wipe that
+ * fails is reported rather than swallowed, so writing left on the device is not
+ * mistaken for a clean sign-out.
  */
 export function clearUserData() {
   loadGeneration += 1;
+  const userId = state.userId;
   state = {
     userId: null,
     loading: false,
@@ -454,16 +475,17 @@ export function clearUserData() {
     settings: defaultSettings,
   };
   listeners.forEach((l) => l());
-  void clearLegacyLocalData();
+  void clearLocalUserData(userId).catch((err: unknown) => {
+    // In-memory state is already gone; this says so when the device copy is not.
+    console.error("Couldn't clear local journal data on sign-out:", err);
+  });
 }
 
-/** Legacy prototype keys are not namespaced per user and hold entry text and a passcode. */
-export async function clearLegacyLocalData(): Promise<void> {
-  try {
-    await AsyncStorage.multiRemove([LEGACY_ENTRIES_KEY, LEGACY_SETTINGS_KEY]);
-  } catch {
-    // Storage can fail; the caller has already cleared in-memory state.
-  }
+/** Legacy prototype keys are not namespaced per user and hold entry text and a passcode.
+    The per-user draft and slider keys hold a whole unsent entry, which must not be
+    readable by whoever signs in next on a shared device. */
+export async function clearLocalUserData(userId: string | null): Promise<void> {
+  await AsyncStorage.multiRemove([LEGACY_ENTRIES_KEY, LEGACY_SETTINGS_KEY, ...localUserKeys(userId)]);
 }
 
 /* ---------- entries ---------- */
@@ -684,13 +706,15 @@ export function useEntries() {
     const assertCurrent = () => {
       if (generation !== loadGeneration || userId !== state.userId) throw new Error("Your account changed. Please reopen this screen.");
     };
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("entries")
       .update(toEntryRow(patch))
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id");
     assertCurrent();
     if (error) throw new Error(error.message);
+    assertRowWritten(data);
     set({ entries: state.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
   }, [userId]);
 
@@ -711,13 +735,15 @@ export function useEntries() {
     if (!entry) return;
     assertCurrent();
     const deletedAt = new Date().toISOString();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("entries")
       .update(toEntryRow({ deletedAt }))
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id");
     assertCurrent();
     if (error) throw new Error(error.message);
+    assertRowWritten(data);
     set({
       entries: state.entries.filter((e) => e.id !== id),
       deletedEntries: [...state.deletedEntries, { ...entry, deletedAt }].sort(byNewest),
@@ -733,13 +759,15 @@ export function useEntries() {
     };
     const entry = state.deletedEntries.find((e) => e.id === id);
     if (!entry) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("entries")
       .update(toEntryRow({ deletedAt: undefined }))
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id");
     assertCurrent();
     if (error) throw new Error(error.message);
+    assertRowWritten(data);
     set({
       entries: [...state.entries, { ...entry, deletedAt: undefined }].sort(byNewest),
       deletedEntries: state.deletedEntries.filter((e) => e.id !== id),

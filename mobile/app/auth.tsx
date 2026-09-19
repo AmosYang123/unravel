@@ -1,4 +1,5 @@
 import { Link } from "expo-router";
+import * as Linking from "expo-linking";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,11 +18,11 @@ import PasswordField from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { MIN_PASSWORD_LENGTH, passwordMeetsRule, useAuth } from "@/lib/auth";
 import { useAnonymousSignIn } from "@/lib/authCapabilities";
-import { passwordRecoveryUrl } from "../lib/passwordRecovery";
+import { parseAuthLink, passwordRecoveryUrl, setPasswordRecoveryPending } from "../lib/passwordRecovery";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
 
-type Mode = "signin" | "signup" | "sent" | "recovery";
+type Mode = "signin" | "signup" | "sent" | "recovery" | "newPassword";
 
 /**
  * How long the resend button stays closed. Supabase counts confirmation emails
@@ -63,6 +64,12 @@ export default function AuthScreen() {
   // resend appears on the sign-in form itself rather than a generic error.
   const [needsConfirming, setNeedsConfirming] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // Ticked once per visit, never persisted. Gates signup and the guest path
+  // only — sign-in already proves they've been through this before.
+  const [agreed, setAgreed] = useState(false);
+  // A reset link's tokens, held unused until the new password is about to be
+  // saved. Nothing is signed in on the strength of the link alone.
+  const [recoveryTokens, setRecoveryTokens] = useState<{ access: string; refresh: string } | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -70,7 +77,55 @@ export default function AuthScreen() {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
+  // Confirmation and reset emails redirect into the app's own scheme, so the
+  // link lands on this screen instead of a web page. Its tokens ride in the URL
+  // fragment, which Linking.parse drops, so the raw link is read instead.
+  const linkedUrl = Linking.useLinkingURL();
+
+  useEffect(() => {
+    const link = parseAuthLink(linkedUrl);
+    if (!link) return;
+    setNotice(null);
+    if (!link.ok) {
+      setMode(link.type === "recovery" ? "recovery" : "signin");
+      setError(
+        link.type === "recovery"
+          ? "That reset link has expired or has already been used. Ask for a new one."
+          : "That confirmation link has expired or has already been used. Sign in to have another sent.",
+      );
+      return;
+    }
+    if (link.type === "recovery") {
+      setRecoveryTokens({ access: link.accessToken, refresh: link.refreshToken });
+      setPassword("");
+      setConfirm("");
+      setError(null);
+      setMode("newPassword");
+      return;
+    }
+    // A confirmed address. Signing in is the whole job; the gate in
+    // app/_layout.tsx takes them the rest of the way.
+    let cancelled = false;
+    void supabase.auth
+      .setSession({ access_token: link.accessToken, refresh_token: link.refreshToken })
+      .then(({ error }) => {
+        if (cancelled || !error) return;
+        console.error("confirmation link failed", error);
+        setMode("signin");
+        setError("We couldn't finish confirming that address. Sign in to have a new link sent.");
+      })
+      .catch(() => {
+        if (!cancelled) setError("We couldn't connect. Check your connection and try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedUrl]);
+
   const passwordOk = passwordMeetsRule(password);
+  // Sign-in is never gated on this — only creating an account or starting a
+  // fresh guest journal need the acknowledgement.
+  const signupGated = mode === "signup" && !agreed;
   const canSubmit =
     email.trim().length > 3 &&
     (mode === "recovery" || (password.length > 0 &&
@@ -126,7 +181,7 @@ export default function AuthScreen() {
       setCooldown(RESEND_COOLDOWN_SECONDS);
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) setError("We couldn't send a reset link just now. Wait a minute and try again.");
-      else setNotice("If an account exists for that email, you'll receive a reset link. Open it in your browser to choose a new password, then return here to sign in.");
+      else setNotice("If an account exists for that email, you'll receive a reset link. Open it on this phone and you'll come straight back here to choose a new password.");
     } else if (mode === "signup") {
       const address = email.trim();
       const { data, error } = await supabase.auth.signUp({
@@ -198,6 +253,42 @@ export default function AuthScreen() {
     }
   };
 
+  // Shown above whichever primary action needs it (signup or guest), never both
+  // at once since the two live in different modes.
+  const ackRow = (
+    <View style={styles.ackRow}>
+      <Pressable
+        onPress={() => setAgreed((a) => !a)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: agreed }}
+        accessibilityLabel="I've read the privacy policy"
+        hitSlop={8}
+        style={styles.ackToggle}
+      >
+        <View
+          style={[
+            styles.ackBox,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: agreed ? theme.colors.primary : "transparent",
+            },
+          ]}
+        >
+          {agreed && <Check color={theme.colors.primaryForeground} size={14} strokeWidth={2.5} />}
+        </View>
+      </Pressable>
+      <Text style={[styles.ackText, { color: theme.colors.mutedForeground }]}>
+        <Text onPress={() => setAgreed((a) => !a)} suppressHighlighting>
+          I've read the{" "}
+        </Text>
+        <Link href="/privacy" style={{ color: theme.colors.foreground, textDecorationLine: "underline" }}>
+          privacy policy
+        </Link>
+        <Text onPress={() => setAgreed((a) => !a)} suppressHighlighting>.</Text>
+      </Text>
+    </View>
+  );
+
   const inputStyle = [
     styles.input,
     {
@@ -218,6 +309,68 @@ export default function AuthScreen() {
     setError(null);
     setNotice(null);
     setNeedsConfirming(false);
+  };
+
+  /** Drops the link's tokens unused. Nothing was signed in, so nothing to undo. */
+  const cancelRecovery = () => {
+    setRecoveryTokens(null);
+    goToSignIn();
+  };
+
+  /**
+   * The recovery session is created here, immediately before the password is
+   * changed, and torn down again if the change fails. The pending flag holds
+   * the auth screen up in between, so the gate can't hand out an ordinary
+   * signed-in session on the strength of the link alone.
+   */
+  const saveNewPassword = async () => {
+    if (!recoveryTokens || busy || !passwordOk || password !== confirm) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    setPasswordRecoveryPending(true);
+    try {
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: recoveryTokens.access,
+        refresh_token: recoveryTokens.refresh,
+      });
+      if (sessionError) {
+        setPasswordRecoveryPending(false);
+        setRecoveryTokens(null);
+        setMode("recovery");
+        setError("That reset link has expired or has already been used. Ask for a new one.");
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        // The password did not change, so nothing may stay signed in.
+        await supabase.auth.signOut();
+        setPasswordRecoveryPending(false);
+        setError(
+          messageOf(error).includes("different")
+            ? "Choose a password you haven't used on this account before."
+            : messageOf(error).includes("weak") || messageOf(error).includes("at least")
+              ? `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`
+              : "We couldn't save that password. Ask for a new link and try again.",
+        );
+        return;
+      }
+      setRecoveryTokens(null);
+      setPassword("");
+      setConfirm("");
+      // Released last: the gate moves them into the app the moment this clears.
+      setPasswordRecoveryPending(false);
+    } catch {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // Already failing; a failed sign-out adds nothing to tell them.
+      }
+      setPasswordRecoveryPending(false);
+      setError("We couldn't connect. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (mode === "sent") {
@@ -274,6 +427,86 @@ export default function AuthScreen() {
           </Pressable>
           <Link href="/privacy" style={{ color: theme.colors.foreground, textDecorationLine: "underline", marginTop: 20 }}>Privacy policy</Link>
         </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (mode === "newPassword") {
+    const canSave = passwordOk && password === confirm;
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+        <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <Lock color={theme.colors.mutedForeground} size={20} strokeWidth={1.5} />
+
+            <Text style={[styles.title, { color: theme.colors.foreground }]}>Choose a new password</Text>
+            <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
+              Pick something you haven't used here before. You'll be signed in as soon as it's saved.
+            </Text>
+
+            <PasswordField
+              label="New password"
+              value={password}
+              onChangeText={setPassword}
+              autoComplete="new-password"
+              textContentType="newPassword"
+            />
+
+            <View style={[styles.rules, { backgroundColor: theme.colors.secondary }]}>
+              <View style={styles.rule}>
+                <Check
+                  color={passwordOk ? theme.colors.foreground : theme.colors.mutedForeground}
+                  size={14}
+                  strokeWidth={2}
+                  opacity={passwordOk ? 1 : 0.3}
+                />
+                <Text
+                  style={[
+                    styles.ruleText,
+                    { color: passwordOk ? theme.colors.foreground : theme.colors.mutedForeground },
+                  ]}
+                >
+                  {`At least ${MIN_PASSWORD_LENGTH} characters`}
+                </Text>
+              </View>
+            </View>
+
+            <PasswordField
+              label="Repeat password"
+              value={confirm}
+              onChangeText={setConfirm}
+              autoComplete="new-password"
+              textContentType="newPassword"
+            />
+            {confirm.length > 0 && confirm !== password && (
+              <Text style={[styles.error, { color: theme.colors.destructive }]}>
+                These two don't match yet.
+              </Text>
+            )}
+
+            {error && <Text style={[styles.message, { color: theme.colors.destructive }]}>{error}</Text>}
+
+            <Pressable
+              onPress={saveNewPassword}
+              disabled={!canSave || busy}
+              accessibilityRole="button"
+              style={[
+                styles.button,
+                { backgroundColor: theme.colors.primary, opacity: !canSave || busy ? 0.5 : 1 },
+              ]}
+            >
+              {busy && <ActivityIndicator color={theme.colors.primaryForeground} size="small" />}
+              <Text style={[styles.buttonText, { color: theme.colors.primaryForeground }]}>
+                Save new password
+              </Text>
+            </Pressable>
+
+            <Pressable accessibilityRole="button" disabled={busy} onPress={cancelRecovery}>
+              <Text style={[styles.switch, { color: theme.colors.foreground }]}>Back to sign in</Text>
+            </Pressable>
+            <Link href="/privacy" style={{ color: theme.colors.foreground, textDecorationLine: "underline", marginTop: 20 }}>Privacy policy</Link>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -372,15 +605,17 @@ export default function AuthScreen() {
           {error && <Text style={[styles.message, { color: theme.colors.destructive }]}>{error}</Text>}
           {notice && <Text style={[styles.message, { color: theme.colors.mutedForeground }]}>{notice}</Text>}
 
+          {mode === "signup" && ackRow}
+
           <Pressable
             onPress={submit}
-            disabled={!canSubmit || busy || authLoading || (mode === "recovery" && cooldown > 0)}
+            disabled={!canSubmit || busy || authLoading || signupGated || (mode === "recovery" && cooldown > 0)}
             accessibilityRole="button"
             style={[
               styles.button,
               {
                 backgroundColor: theme.colors.primary,
-                opacity: !canSubmit || busy || authLoading ? 0.5 : 1,
+                opacity: !canSubmit || busy || authLoading || signupGated ? 0.5 : 1,
               },
             ]}
           >
@@ -410,15 +645,17 @@ export default function AuthScreen() {
 
           {mode === "signin" && guestEnabled && (
             <View style={[styles.guest, { borderTopColor: theme.colors.border }]}>
+              {ackRow}
               <Pressable
                 onPress={continueAsGuest}
-                disabled={busy || authLoading}
+                disabled={busy || authLoading || !agreed}
                 accessibilityRole="button"
                 style={[
                   styles.guestButton,
                   {
                     borderColor: theme.colors.border,
-                    opacity: busy || authLoading ? 0.5 : 1,
+                    marginTop: 16,
+                    opacity: busy || authLoading || !agreed ? 0.5 : 1,
                   },
                 ]}
               >
@@ -427,8 +664,8 @@ export default function AuthScreen() {
                 </Text>
               </Pressable>
               <Text style={[styles.guestNote, { color: theme.colors.mutedForeground }]}>
-                A guest journal has no email attached, so it stays on this device and can't be
-                brought back if you lose access. You can add an email later in settings.
+                A guest journal has no email attached, so there's no way to sign back in — it's
+                tied to this install and lost if you remove the app. You can add an email later in settings.
               </Text>
             </View>
           )}
@@ -474,6 +711,10 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   ruleText: { fontFamily: fonts.body, fontSize: 12 },
   error: { fontFamily: fonts.body, fontSize: 12, marginTop: 8 },
   message: { fontFamily: fonts.body, fontSize: 14, marginTop: 16 },
+  ackRow: { flexDirection: "row", alignItems: "center", marginTop: 20 },
+  ackToggle: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  ackBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  ackText: { fontFamily: fonts.body, fontSize: 13, lineHeight: 19, flex: 1, marginLeft: -6 },
   button: {
     height: 48,
     borderRadius: 999,

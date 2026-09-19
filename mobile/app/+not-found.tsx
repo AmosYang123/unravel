@@ -1,4 +1,4 @@
-import { Link, Stack } from "expo-router";
+import { Link } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
@@ -9,7 +9,6 @@ export default function NotFoundScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Not found" }} />
       <View style={[styles.body, { backgroundColor: theme.colors.background }]}>
         <Text style={[styles.title, { color: theme.colors.foreground }]}>This page isn't here</Text>
         <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>

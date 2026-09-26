@@ -63,6 +63,7 @@ For ages 13 and up.
 - **Secondary category:** Lifestyle
 - **Content rights:** the app shows third-party content (song previews and artwork from Deezer, article links from web search). Answer "Yes, it contains third-party content" and confirm you have the rights to use it.
 - **Price:** Free
+- **EU Digital Services Act (trader status):** App Store Connect asks this before the app can be sold in the EU. As an individual with no business, choose "not a trader". To avoid the question for now, untick the EU countries under Pricing and Availability.
 
 ## Age rating questionnaire
 
@@ -99,6 +100,8 @@ No ads, no tracking, and no App Tracking Transparency prompt is needed.
 > Unravel is a private journaling app for ages 13 and up. Sign in with the demo account above.
 >
 > Optional AI suggestions are off until the user turns them on, either on the first setup screen or in Settings → Privacy & data. They need the user's permission, and the privacy policy names each service involved. With them on, saving an entry offers a short reflection, song suggestions (previews from Deezer) and a Reading tab of web articles.
+>
+> Settings opens with "Need to talk to someone now?", which points to local emergency numbers, 988 in the US, and findahelpline.com. AI reflections also suggest a trusted person or a crisis line if an entry mentions self-harm.
 >
 > The microphone is used only after tapping Record. Notifications are requested only when reminders are turned on. Account deletion is in Settings → Account → Delete account.
 >

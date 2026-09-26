@@ -264,9 +264,13 @@ export default function TimelineScreen() {
                   onPress={() => setParam("mode", m === "all" ? "" : m)}
                 />
               ))}
-              <Chip label="Kept" selected={keptOnly} onPress={() => setParam("kept", keptOnly ? "" : "1")} />
             </View>
 
+            {feelingOptions.length > 0 && (
+              <Text style={[styles.sectionLabel, styles.filterLabel, { color: theme.colors.mutedForeground }]}>
+                Your moods
+              </Text>
+            )}
             {feelingOptions.length > 0 && (
               <View style={styles.chipRow}>
                 {shownFeelings.map((f) => (
@@ -453,6 +457,7 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   },
   jumpChip: { marginRight: 8 },
   sectionHeader: { paddingTop: 20, paddingBottom: 8 },
+  filterLabel: { marginTop: 20 },
   sectionLabel: {
     fontFamily: fonts.bodySemiBold,
     fontSize: 11,

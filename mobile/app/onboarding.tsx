@@ -10,10 +10,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import { Button, Chip } from "@/components/ui";
 import { FOCUS_AREAS, GOALS, MAX_INTERESTS, optionalSetupPatch, YEAR_LEVELS } from "@/lib/onboarding";
+import { AI_SUGGESTIONS_CONSENT, AI_SUGGESTIONS_SUMMARY } from "@/lib/privacy";
 import { useSettings } from "@/lib/store";
 import {
   applyTagOutcomes,
@@ -28,6 +29,9 @@ import {
 import type { YearLevel } from "@/lib/types";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
+
+/** The AI suggestions question, then the four question screens. */
+const TOTAL_STEPS = 5;
 
 /** Adds or removes one id, leaving the rest of the picks alone. */
 const toggle = (list: string[], id: string): string[] =>
@@ -55,6 +59,8 @@ export default function OnboardingScreen() {
   const [notices, setNotices] = useState<TagOutcome[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // First-run setup goes one screen at a time; editing from Settings shows them all.
+  const [step, setStep] = useState(0);
 
   // The boxes are seeded once from the profile, so nothing is rendered until
   // the profile is actually here — otherwise arriving before it lands would
@@ -93,23 +99,34 @@ export default function OnboardingScreen() {
 
   const dismiss = (outcome: TagOutcome) => setNotices((list) => list.filter((o) => o !== outcome));
 
-  // Skipping still stamps onboardedAt, so the questions don't come back. Every
-  // answer is still reachable from Settings afterwards.
-  const finish = async (keepAnswers: boolean) => {
+  // Stamps onboardedAt with whatever was answered, so the questions don't come
+  // back. Every answer is still reachable from Settings afterwards.
+  const finish = async () => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await update(
-        keepAnswers
-          ? optionalSetupPatch({ name, yearLevel, focusAreas, goals, interests, interestDraft }, new Date().toISOString())
-          : { onboardedAt: new Date().toISOString() },
-      );
+      await update(optionalSetupPatch({ name, yearLevel, focusAreas, goals, interests, interestDraft }, new Date().toISOString()));
       if (editing) router.back();
       else router.replace("/");
     } catch (err) {
       console.error("could not save onboarding answers", err);
       setError("That didn't save. Try once more, or skip for now.");
+      setBusy(false);
+    }
+  };
+
+  const chooseSuggestions = async (enabled: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (enabled) await update({ aiSuggestionsEnabled: true });
+      setStep((n) => n + 1);
+    } catch (err) {
+      console.error("could not save AI suggestions choice", err);
+      setError("That didn't save. Try again, or choose Not now.");
+    } finally {
       setBusy(false);
     }
   };
@@ -121,18 +138,9 @@ export default function OnboardingScreen() {
     </>
   );
 
-  return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-      <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.title, { color: theme.colors.foreground }]}>
-            {editing ? "Your setup" : "A few optional things"}
-          </Text>
-          <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
-            Every question is optional. Answer only what feels useful, and change any answer later in Settings.
-          </Text>
-
-          {question("What should we call you? (optional)", "A name or nickname for greetings. Leaving it blank is completely fine.")}
+  const questions = [
+        <>
+          {question("What should we call you?", "Optional.")}
           <TextInput
             style={[
               styles.input,
@@ -149,7 +157,7 @@ export default function OnboardingScreen() {
             placeholderTextColor={theme.colors.mutedForeground}
           />
 
-          {question("What grade are you in? (optional)", "Choose Prep, Lower, Upper or Senior, or leave this blank.")}
+          {question("What grade are you in?")}
           <View style={styles.chips}>
             {YEAR_LEVELS.map((level) => (
               <Chip
@@ -161,7 +169,9 @@ export default function OnboardingScreen() {
             ))}
           </View>
 
-          {question("What's on your plate right now? (optional)", "Choose any that fit. You can also choose none.")}
+        </>,
+        <>
+          {question("What's on your plate right now?", "Pick any that fit.")}
           <View style={styles.chips}>
             {FOCUS_AREAS.map((area) => (
               <Chip
@@ -173,7 +183,9 @@ export default function OnboardingScreen() {
             ))}
           </View>
 
-          {question("What would you like from this? (optional)", "Choose what you hope journaling might help with, or leave this blank.")}
+        </>,
+        <>
+          {question("What would you like from this?", "Pick any that fit.")}
           <View style={styles.chips}>
             {GOALS.map((goal) => (
               <Chip
@@ -185,7 +197,9 @@ export default function OnboardingScreen() {
             ))}
           </View>
 
-          {question("Things you enjoy (optional)", "Add hobbies or interests that help recommendations feel relevant—for example drawing, football, gaming, cooking, or reading.")}
+        </>,
+        <>
+          {question("Things you enjoy", "Like drawing, football or cooking.")}
           <View style={styles.addRow}>
             <TextInput
               style={[
@@ -268,27 +282,65 @@ export default function OnboardingScreen() {
             </View>
           )}
 
+        </>,
+  ];
+
+  return (
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+      <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {editing ? (
+            <Text style={[styles.title, { color: theme.colors.foreground }]}>Your setup</Text>
+          ) : (
+            <Text style={[styles.progress, { color: theme.colors.mutedForeground }]}>
+              {step + 1} of {TOTAL_STEPS}
+            </Text>
+          )}
+
+          {!editing && step === 0 ? (
+            <>
+              <Text style={[styles.title, { color: theme.colors.foreground }]}>Turn on AI suggestions?</Text>
+              <Text style={[styles.lede, { color: theme.colors.foreground }]}>{AI_SUGGESTIONS_SUMMARY}</Text>
+              <Text style={[styles.hint, { color: theme.colors.mutedForeground }]}>{AI_SUGGESTIONS_CONSENT}</Text>
+              <Link href="/privacy" style={[styles.hint, styles.learnMore, { color: theme.colors.foreground }]}>
+                Learn more
+              </Link>
+            </>
+          ) : editing ? (
+            questions
+          ) : (
+            questions[step - 1]
+          )}
+
           {error && <Text style={[styles.error, { color: theme.colors.destructive }]}>{error}</Text>}
 
-          <Button
-            label={editing ? "Save changes" : "Save and continue"}
-            onPress={() => void finish(true)}
-            disabled={busy}
-            style={styles.save}
-          />
-
           {editing ? (
-            <Pressable onPress={() => router.back()} disabled={busy} accessibilityRole="button">
-              <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Cancel</Text>
-            </Pressable>
+            <>
+              <Button label="Save changes" onPress={() => void finish()} disabled={busy} style={styles.save} />
+              <Pressable onPress={() => router.back()} disabled={busy} accessibilityRole="button">
+                <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+            </>
+          ) : step === 0 ? (
+            <>
+              <Button label="Turn on" onPress={() => void chooseSuggestions(true)} disabled={busy} style={styles.save} />
+              <Pressable onPress={() => void chooseSuggestions(false)} disabled={busy} accessibilityRole="button">
+                <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Not now</Text>
+              </Pressable>
+            </>
           ) : (
             <>
-              <Pressable onPress={() => void finish(false)} disabled={busy} accessibilityRole="button">
-                <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Skip for now</Text>
-              </Pressable>
-              <Text style={[styles.hint, { color: theme.colors.mutedForeground }]}>
-                This leaves every optional answer blank. You can add them later from Settings → Your setup.
-              </Text>
+              <Button
+                label={step === TOTAL_STEPS - 1 ? "Finish" : "Continue"}
+                onPress={() => (step === TOTAL_STEPS - 1 ? void finish() : setStep(step + 1))}
+                disabled={busy}
+                style={styles.save}
+              />
+              {step < TOTAL_STEPS - 1 && (
+                <Pressable onPress={() => void finish()} disabled={busy} accessibilityRole="button">
+                  <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Skip the rest</Text>
+                </Pressable>
+              )}
             </>
           )}
         </ScrollView>
@@ -301,6 +353,8 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 24, paddingVertical: 40, maxWidth: 420, width: "100%", alignSelf: "center" },
   title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34 },
+  progress: { fontFamily: fonts.body, fontSize: 13, marginBottom: 12 },
+  learnMore: { textDecorationLine: "underline", marginTop: 12 },
   lede: { fontFamily: fonts.body, fontSize: 14, lineHeight: 22, marginTop: 12 },
   question: { fontFamily: fonts.display, fontSize: 19, lineHeight: 26, marginTop: 32 },
   hint: { fontFamily: fonts.body, fontSize: 13, lineHeight: 20, marginTop: 6 },

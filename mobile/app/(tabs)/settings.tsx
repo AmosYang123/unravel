@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { AI_SHARING_NOTICE } from "@/lib/privacy";
+import { AI_SUGGESTIONS_CONSENT, AI_SUGGESTIONS_SUMMARY } from "@/lib/privacy";
 import { releaseConfig } from "@/lib/release-config";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,6 +35,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeAuthedFunction } from "@/lib/edgeFunctions";
 import { MIN_PASSWORD_LENGTH, passwordMeetsRule, useAuth } from "@/lib/auth";
 import { useDeviceReminders } from "@/lib/notifications";
+import { rememberPasscode } from "@/lib/passcodeShortcut";
 import {
   fetchAllEntries,
   hashPasscode,
@@ -238,7 +239,7 @@ function ProfileSection() {
       <SettingRow title="You" value={summary} onPress={() => setOpen(true)} />
 
       <Dialog visible={open} onClose={() => setOpen(false)} title="You">
-        <Row title="Name or nickname" description="Only used in greetings. Leave blank if you'd rather not.">
+        <Row title="Name or nickname" description="Used in greetings. Optional.">
           <TextInput
             value={nameDraft}
             onChangeText={setNameDraft}
@@ -279,7 +280,7 @@ const REMINDER_DAY_LABELS = [
   { short: "S", full: "Saturday" },
 ];
 
-const TEST_SENT = "Sent. Give it a minute, then check your inbox — or spam, if it's not there.";
+const TEST_SENT = "Sent. Check your inbox (and spam).";
 const TEST_FAILED = "That didn't send. Try again in a moment.";
 
 /** The function's own wording when it has one, never its internals. */
@@ -337,8 +338,8 @@ function RemindersSection() {
   // permission back, rather than showing a switch that would do nothing.
   const phoneDescription = phoneError ?? (
     phonePermission === "denied"
-      ? "Notifications are turned off for Unravel in your phone's settings. Turn them on there and these will start arriving."
-      : "A quiet notification at the time above. Set separately on each phone you use.");
+      ? "Off in iPhone Settings. Tap Open Settings, then Notifications, and turn on Allow Notifications."
+      : "A quiet notification at your reminder time.");
 
   const sendTest = async () => {
     setTestState("sending");
@@ -371,7 +372,7 @@ function RemindersSection() {
         visible={open}
         onClose={() => setOpen(false)}
         title="Check-in rhythm"
-        description="How often Unravel reminds you to check in, and where the reminder arrives."
+        description="When and where to remind you."
       >
         <View style={styles.chipRow}>
           {REMINDER_MODES.map((r) => (
@@ -408,7 +409,7 @@ function RemindersSection() {
           <View>
             <Row
               title="Time"
-              description={`Sent around this time, in your local time zone (${settings.timezone}).`}
+              description={`Your local time (${settings.timezone}).`}
             >
               <TextInput
                 value={timeInput}
@@ -432,12 +433,12 @@ function RemindersSection() {
 
         <SectionLabel>Delivery</SectionLabel>
         <Text style={[styles.helperText, { color: theme.colors.mutedForeground }]}>
-          Choose either option or use both. Turning one on also starts the default certain-days rhythm if reminders are off.
+          Use one or both.
         </Text>
         <View>
             <Row title="App notification" description={phoneDescription}>
               {phonePermission === "denied" ? (
-                <Button label="Open settings" variant="ghost" onPress={() => void Linking.openSettings()} />
+                <Button label="Open Settings" variant="ghost" onPress={() => void Linking.openSettings()} />
               ) : (
                 <Switch
                   disabled={phoneBusy}
@@ -453,7 +454,7 @@ function RemindersSection() {
             <Divider />
             <Row
               title="Email reminders"
-              description={`A short reminder email to ${user?.email ?? "your email"}. Turn it off any time.`}
+              description={`To ${user?.email ?? "your email"}.`}
             >
               <Switch
                 value={settings.reminderEmails}
@@ -464,7 +465,7 @@ function RemindersSection() {
             <Divider />
             <Row
               title="Discreet wording"
-              description='Reminders read "A moment for you" — never the app name or your mood.'
+              description='Reminders just say "A moment for you."'
             >
               <Switch
                 value={settings.discreetNotifications}
@@ -479,9 +480,9 @@ function RemindersSection() {
         visible={testsOpen}
         onClose={() => setTestsOpen(false)}
         title="Test reminders"
-        description="Check each delivery method without changing your reminder schedule."
+        description="Your schedule stays the same."
       >
-        <Row title="Email" description={`Send one reminder to ${user?.email ?? "your email"}.`}>
+        <Row title="Email" description={`To ${user?.email ?? "your email"}.`}>
           <Button
             label={testState === "sending" ? "Sending…" : testState === "sent" ? "Send again" : "Send a test"}
             variant="ghost"
@@ -495,7 +496,7 @@ function RemindersSection() {
           }]}>{testMessage}</Text>
         )}
         <Divider />
-        <Row title="App notification" description="Send a notification to this phone immediately.">
+        <Row title="App notification" description="To this phone, right now.">
           <Button
             label={notificationTestState === "sending" ? "Sending…" : "Send a test"}
             variant="ghost"
@@ -512,8 +513,8 @@ function RemindersSection() {
             color: notificationTestState === "error" ? theme.colors.destructive : theme.colors.mutedForeground,
           }]}>
             {notificationTestState === "sent"
-              ? "Sent to this phone. If it didn't appear, check Unravel in iOS notification settings."
-              : (phoneError ?? "Notifications aren't allowed yet. Enable them in iOS Settings and try again.")}
+              ? "Sent. Nothing showed up? Check Notifications in Settings."
+              : (phoneError ?? "Notifications are off. In Settings, tap Notifications and turn on Allow Notifications.")}
           </Text>
         )}
       </Dialog>
@@ -630,7 +631,7 @@ function AccountSection() {
       setUpgradePassword("");
     } else {
       setUpgradeNotice(
-        `We've sent a confirmation link to ${upgradeEmail.trim()}. Open it to finish attaching the address — until then this stays a guest journal.`,
+        `Tap the link we sent to ${upgradeEmail.trim()} to finish.`,
       );
       setUpgradePassword("");
     }
@@ -681,11 +682,7 @@ function AccountSection() {
       <Dialog visible={open} onClose={() => setOpen(false)} title="Account">
         <Row
           title="Signed in as"
-          description={
-            isGuest
-              ? "This journal lives on this device. Add an email below and it becomes an account you can get back into."
-              : "Entries, recordings and these preferences are saved to this account only."
-          }
+          description={isGuest ? "Saved on this phone only. Add an email to keep it." : undefined}
         >
           <Text style={[styles.mutedValue, { color: theme.colors.mutedForeground }]}>{user?.email ?? "Guest"}</Text>
         </Row>
@@ -694,8 +691,7 @@ function AccountSection() {
           <View style={styles.guestBlock}>
             <Text style={[styles.rowTitle, { color: theme.colors.foreground }]}>Keep this journal</Text>
             <Text style={[styles.rowDescription, { color: theme.colors.mutedForeground }]}>
-              Adding an email and password turns this guest journal into an account. Nothing moves or is copied —
-              every entry, recording and preference stays exactly where it is, on the same account.
+              Add an email and password to sign in anywhere. Everything stays as it is.
             </Text>
             <Text style={[styles.fieldLabel, { color: theme.colors.mutedForeground }]}>Email</Text>
             <TextInput
@@ -824,11 +820,7 @@ function AccountSection() {
         <Divider />
         <Row
           title="Sign out"
-          description={
-            isGuest
-              ? "A guest journal has no email to sign back in with, so signing out leaves it behind for good."
-              : "You'll need your email and password to get back in."
-          }
+          description={isGuest ? "A guest journal can't be opened again after signing out." : undefined}
         >
           <Button
             label={signingOut ? signOutMessage : "Sign out"}
@@ -844,7 +836,7 @@ function AccountSection() {
         <Divider />
         <Row
           title="Delete account"
-          description="Permanently deletes your entries, recordings, preferences and account. This can't be undone."
+          description="Erases everything. Can't be undone."
         >
           <Button
             label={deletingAccount ? "Deleting…" : "Delete account"}
@@ -948,7 +940,9 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
     }
     setSavingCode(true);
     try {
-      await update({ lockEnabled: true, passcode: await hashPasscode(newCode) });
+      const passcode = await hashPasscode(newCode);
+      await update({ lockEnabled: true, passcode });
+      await rememberPasscode(newCode, passcode);
       closeCodeEditor();
       toast("Code saved.");
     } catch (err) {
@@ -997,7 +991,7 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
       <SectionLabel>Privacy &amp; data</SectionLabel>
       <Link href="/privacy" style={{ color: theme.colors.foreground, textDecorationLine: "underline", paddingVertical: 16 }}>Privacy policy</Link>
       {releaseConfig.supportUrl ? <Link href={releaseConfig.supportUrl} style={{ color: theme.colors.foreground, textDecorationLine: "underline", paddingVertical: 16 }}>Support</Link> : null}
-      <Row title="Passcode lock" description="Ask for a 4-digit code when the app opens, on top of your password.">
+      <Row title="Passcode lock" description="Ask for a 4-digit code to open the app.">
         <Switch
           value={settings.lockEnabled}
           disabled={savingCode}
@@ -1008,7 +1002,7 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
       {(settings.lockEnabled || editingCode) && (
         <>
           <Divider />
-          <Row title="Code" description="A quick second lock — not a replacement for your password.">
+          <Row title="Code">
             {editingCode ? (
               <View style={styles.codeEditor}>
                 <TextInput
@@ -1060,7 +1054,7 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
       <Divider />
       <Row
         title="AI suggestions"
-        description="Optional sharing with Groq, Google Search and Deezer. Review the details before enabling. Your journal still syncs to Supabase when this is off."
+        description={AI_SUGGESTIONS_SUMMARY}
       >
         <Switch
           value={settings.aiSuggestionsEnabled}
@@ -1073,14 +1067,14 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
       <Divider />
       <ConfirmDialog
         visible={confirmSharing}
-        title="Allow optional data sharing?"
-        description={AI_SHARING_NOTICE}
-        confirmLabel="Allow sharing"
+        title="Turn on AI suggestions?"
+        description={AI_SUGGESTIONS_CONSENT}
+        confirmLabel="Turn on"
         cancelLabel="Not now"
         onConfirm={() => void saveSharing(true)}
         onCancel={() => setConfirmSharing(false)}
       />
-      <Row title="Export a copy" description="A clearly labelled text file with your preferences and every entry, newest first.">
+      <Row title="Export a copy" description="Save all your entries as a text file.">
         <Button label={exporting ? "Gathering…" : "Export"} variant="ghost" onPress={onExport} disabled={exporting} />
       </Row>
 
@@ -1257,8 +1251,7 @@ export default function SettingsScreen() {
         />
 
         <Text style={[styles.footerNote, { color: theme.colors.mutedForeground }]}>
-          Your entries, voice recordings and preferences are stored in your own account and readable only by
-          you.
+          Your journal is private to your account.
         </Text>
       </ScrollView>
 

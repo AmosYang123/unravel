@@ -1,5 +1,10 @@
 export const AI_SHARING_NOTICE = "Allow Unravel to send journal text, moods, feelings, relevant profile preferences, short labels, voice recordings and long transcripts to Groq for AI reflections, label corrections, transcription and summaries. Personalized reading searches send topic and profile-derived queries to Google Custom Search. Music lookups send artist and genre queries to Deezer. These services process the data to provide the requested features. You can turn this off in Settings at any time. Journaling, recording, breathing and Supabase account sync still work with it off.";
 
+/** What AI suggestions are, in the user's terms. */
+export const AI_SUGGESTIONS_SUMMARY = "Gentle reflections on your entries, plus reading and music picks for your mood.";
+/** Shown where someone turns them on. The privacy policy names each service. */
+export const AI_SUGGESTIONS_CONSENT = "To make these, your entries, moods and recordings are sent to our AI partners. Turn it off any time in Settings. Journaling works either way.";
+
 export const PRIVACY_SECTIONS = [
   { title: "Who can use Unravel", text: "Unravel is for people aged 13 and over. Creating an account or starting a guest journal asks for your date of birth to confirm this. The date is checked at that moment and is not stored, and it is not asked for again when you sign back in. If we learn that an account belongs to someone under 13, we delete the account and its journal. Contact support to report one." },
   { title: "Public website and support", text: "You can read the public website, privacy policy and support page without signing in. These pages do not start a Supabase journal session. Fonts are served with the website. When the website is hosted on Vercel, Vercel processes network and request information to deliver and secure it. If you contact support, the operators and email provider process your email address and the information you send to respond to your request. Please do not send passwords or private journal entries." },

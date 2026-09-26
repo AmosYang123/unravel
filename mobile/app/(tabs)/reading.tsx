@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Linking, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Linking, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowUpRight, Loader2, RefreshCw } from "lucide-react-native";
+import { ArrowUpRight, RefreshCw } from "lucide-react-native";
 import { Button, Chip, PageTitle, PageUnderline, SectionLabel, Surface } from "@/components/ui";
 import { fetchArticleRecs, type ArticleRec } from "@/lib/articles";
 import { useEntries, useSettings } from "@/lib/store";
@@ -124,7 +124,7 @@ export default function ReadingScreen() {
 
             {loading ? (
               <View style={styles.statusRow}>
-                <Loader2 color={theme.colors.accent} size={16} />
+                <ActivityIndicator color={theme.colors.accent} size="small" />
                 <Text style={[styles.statusText, { color: theme.colors.mutedForeground }]}>
                   Looking for something worth your time…
                 </Text>

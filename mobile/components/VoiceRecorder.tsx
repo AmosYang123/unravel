@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Mic, Square, Trash2 } from "lucide-react-native";
 import { AudioPlayer, useVoiceRecorder, withAlpha } from "@/components/ui";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
@@ -36,6 +36,7 @@ const VoiceRecorder = ({ recording: saved, seconds = 0, onChange }: Props) => {
   const voice = useVoiceRecorder();
   const [finalizing, setFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [micBlocked, setMicBlocked] = useState(false);
   const cappedRef = useRef(false);
 
   const elapsed = Math.floor(voice.durationMillis / 1000);
@@ -52,11 +53,18 @@ const VoiceRecorder = ({ recording: saved, seconds = 0, onChange }: Props) => {
 
   const start = async () => {
     setError(null);
+    setMicBlocked(false);
     cappedRef.current = false;
     try {
       await voice.start();
-    } catch {
-      setError("Microphone unavailable. You can type instead — nothing is lost.");
+    } catch (err) {
+      // iOS asks only once; after a "Don't Allow" the switch lives in Settings.
+      if (err instanceof Error && err.message.includes("permission")) {
+        setMicBlocked(true);
+        setError("Microphone is off for Unravel. You can still type.");
+      } else {
+        setError("Microphone unavailable. You can type instead — nothing is lost.");
+      }
     }
   };
 
@@ -132,6 +140,13 @@ const VoiceRecorder = ({ recording: saved, seconds = 0, onChange }: Props) => {
       )}
 
       {error && <Text style={[styles.error, { color: theme.colors.destructive }]}>{error}</Text>}
+      {micBlocked && (
+        <Pressable onPress={() => void Linking.openSettings()} accessibilityRole="link" hitSlop={8}>
+          <Text style={[styles.error, { color: theme.colors.foreground, textDecorationLine: "underline" }]}>
+            Open Settings, then turn on Microphone
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 };

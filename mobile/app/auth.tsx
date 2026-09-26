@@ -23,7 +23,8 @@ import { parseAuthLink, passwordRecoveryUrl, setPasswordRecoveryPending } from "
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
 
-type Mode = "signin" | "signup" | "sent" | "recovery" | "newPassword";
+// A new account starts at "age": one question per screen, birthday first.
+type Mode = "age" | "signin" | "signup" | "sent" | "recovery" | "newPassword";
 
 /**
  * How long the resend button stays closed. Supabase counts confirmation emails
@@ -51,7 +52,7 @@ export default function AuthScreen() {
   const { loading: authLoading } = useAuth();
   // Only offered when the project actually accepts anonymous sign-ins.
   const guestEnabled = useAnonymousSignIn();
-  const [mode, setMode] = useState<Mode>("signup");
+  const [mode, setMode] = useState<Mode>("age");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -196,7 +197,7 @@ export default function AuthScreen() {
       setCooldown(RESEND_COOLDOWN_SECONDS);
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) setError("We couldn't send a reset link just now. Wait a minute and try again.");
-      else setNotice("If an account exists for that email, you'll receive a reset link. Open it on this phone and you'll come straight back here to choose a new password.");
+      else setNotice("If an account exists for that email, a reset link is on its way. Open it on this phone.");
     } else if (mode === "signup") {
       const address = email.trim();
       const { data, error } = await supabase.auth.signUp({
@@ -363,7 +364,7 @@ export default function AuthScreen() {
         </Text>
       ) : (
         <Text style={[styles.ageNote, { color: theme.colors.mutedForeground }]}>
-          Checked once to confirm you are {MINIMUM_AGE} or older, then discarded.
+          Only used to check your age. Not saved.
         </Text>
       )}
     </View>
@@ -452,10 +453,7 @@ export default function AuthScreen() {
 
           <Text style={[styles.title, { color: theme.colors.foreground }]}>Check your inbox</Text>
           <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
-            We sent a confirmation link to {sentTo}. Open it, then come back and sign in.
-          </Text>
-          <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
-            Nothing yet? It can take a minute, and it sometimes lands in spam.
+            Tap the link we sent to {sentTo}. Not there? Check spam.
           </Text>
 
           {error && <Text style={[styles.message, { color: theme.colors.destructive }]}>{error}</Text>}
@@ -512,7 +510,7 @@ export default function AuthScreen() {
 
             <Text style={[styles.title, { color: theme.colors.foreground }]}>Choose a new password</Text>
             <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
-              Pick something you haven't used here before. You'll be signed in as soon as it's saved.
+              You'll be signed in once it's saved.
             </Text>
 
             <PasswordField
@@ -582,6 +580,38 @@ export default function AuthScreen() {
     );
   }
 
+  if (mode === "age") {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+        <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <Lock color={theme.colors.mutedForeground} size={20} strokeWidth={1.5} />
+            <Text style={[styles.title, { color: theme.colors.foreground }]}>When's your birthday?</Text>
+            <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
+              Unravel is for ages {MINIMUM_AGE} and up.
+            </Text>
+            {ageRow}
+            <Pressable
+              onPress={() => setMode("signup")}
+              disabled={!ageCleared}
+              accessibilityRole="button"
+              style={[styles.button, { backgroundColor: theme.colors.primary, opacity: ageCleared ? 1 : 0.5 }]}
+            >
+              <Text style={[styles.buttonText, { color: theme.colors.primaryForeground }]}>Continue</Text>
+            </Pressable>
+            <Pressable
+              onPress={goToSignIn}
+              accessibilityLabel="I already have an account"
+              style={[styles.accountSwitch, { borderColor: theme.colors.border, backgroundColor: theme.colors.card }]}
+            >
+              <Text style={[styles.accountSwitchText, { color: theme.colors.foreground }]}>I already have an account</Text>
+            </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
       <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -589,12 +619,12 @@ export default function AuthScreen() {
           <Lock color={theme.colors.mutedForeground} size={20} strokeWidth={1.5} />
 
           <Text style={[styles.title, { color: theme.colors.foreground }]}>
-            {mode === "recovery" ? "Reset your password" : mode === "signup" ? "Make your private space" : "Welcome back"}
+            {mode === "recovery" ? "Reset your password" : mode === "signup" ? "Create your account" : "Welcome back"}
           </Text>
           <Text style={[styles.lede, { color: theme.colors.mutedForeground }]}>
             {mode === "signup"
-              ? "Your entries, recordings and preferences sync to your private account using Supabase. Optional AI sharing is off until you allow it."
-              : mode === "recovery" ? "Enter your email to request a password reset link." : "Sign in to reach your entries and preferences."}
+              ? "Your journal stays private to you."
+              : mode === "recovery" ? "We'll email you a reset link." : "Sign in to your journal."}
           </Text>
 
           <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>Email</Text>
@@ -656,8 +686,7 @@ export default function AuthScreen() {
           {needsConfirming && (
             <View style={[styles.rules, { backgroundColor: theme.colors.secondary }]}>
               <Text style={[styles.ruleText, { color: theme.colors.foreground, fontSize: 14, lineHeight: 21 }]}>
-                That address hasn't been confirmed yet. Open the link we emailed to {sentTo}, then
-                sign in here.
+                Confirm your email first: tap the link we sent to {sentTo}.
               </Text>
               <Pressable
                 onPress={resend}
@@ -676,12 +705,7 @@ export default function AuthScreen() {
           {error && <Text style={[styles.message, { color: theme.colors.destructive }]}>{error}</Text>}
           {notice && <Text style={[styles.message, { color: theme.colors.mutedForeground }]}>{notice}</Text>}
 
-          {mode === "signup" && (
-            <>
-              {ageRow}
-              {ackRow}
-            </>
-          )}
+          {mode === "signup" && ackRow}
 
           <Pressable
             onPress={submit}
@@ -719,10 +743,8 @@ export default function AuthScreen() {
             </Pressable>
           )}
 
-          {mode === "signin" && guestEnabled && (
+          {mode === "signup" && guestEnabled && (
             <View style={[styles.guest, { borderTopColor: theme.colors.border }]}>
-              {ageRow}
-              {ackRow}
               <Pressable
                 onPress={continueAsGuest}
                 disabled={busy || authLoading || !agreed || !ageCleared}
@@ -731,7 +753,6 @@ export default function AuthScreen() {
                   styles.guestButton,
                   {
                     borderColor: theme.colors.border,
-                    marginTop: 16,
                     opacity: busy || authLoading || !agreed || !ageCleared ? 0.5 : 1,
                   },
                 ]}
@@ -741,15 +762,18 @@ export default function AuthScreen() {
                 </Text>
               </Pressable>
               <Text style={[styles.guestNote, { color: theme.colors.mutedForeground }]}>
-                A guest journal has no email attached, so there's no way to sign back in — it's
-                tied to this install and lost if you remove the app. You can add an email later in settings.
+                No email needed. If you delete the app, a guest journal is gone. You can add an email later.
               </Text>
             </View>
           )}
 
           <Pressable
             onPress={() => {
-              setMode(mode === "signup" ? "signin" : "signup");
+              if (mode === "signup") {
+                goToSignIn();
+                return;
+              }
+              setMode("age");
               setError(null);
               setNotice(null);
               setNeedsConfirming(false);
@@ -789,8 +813,8 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   error: { fontFamily: fonts.body, fontSize: 12, marginTop: 8 },
   message: { fontFamily: fonts.body, fontSize: 14, marginTop: 16 },
   birthRow: { flexDirection: "row", gap: 8 },
-  birthPart: { flex: 1 },
-  birthYear: { flex: 1.6 },
+  birthPart: { flex: 1, minWidth: 0 },
+  birthYear: { flex: 1.6, minWidth: 0 },
   ageNote: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginTop: 8 },
   ackRow: { flexDirection: "row", alignItems: "center", marginTop: 20 },
   ackToggle: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },

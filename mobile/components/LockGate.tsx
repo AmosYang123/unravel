@@ -6,6 +6,7 @@ import { Lock } from "lucide-react-native";
 import { Button } from "./ui";
 import { useAuth } from "../lib/auth";
 import { hashPasscode, needsPasscodeUpgrade, useSettings, verifyPasscode } from "@/lib/store";
+import { checkRememberedPasscode, rememberPasscode } from "../lib/passcodeShortcut";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
 
@@ -13,6 +14,9 @@ import type { FontSet } from "@/theme/tokens";
 const FREE_ATTEMPTS = 2;
 const BASE_DELAY_MS = 5000;
 const MAX_DELAY_MS = 30000;
+
+/** Coming back within this long after leaving the app skips the code. */
+export const LOCK_GRACE_MS = 10_000;
 
 /** The count and the wait live on the device, so force-quitting cannot reset them. */
 const THROTTLE_KEY = "quiet.lockThrottle.v1";
@@ -34,6 +38,9 @@ export default function LockGate({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const [hasEntered, setHasEntered] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  // Hides the journal while the app is out of view, without asking for the code.
+  const [covered, setCovered] = useState(false);
+  const leftAt = useRef<number | null>(null);
   const inputRef = useRef<TextInput>(null);
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
@@ -83,8 +90,18 @@ export default function LockGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
       // iOS takes its app-switcher snapshot at "inactive", before "background",
-      // so the gate has to close by then or the journal ends up in the switcher.
-      if (next !== "background" && next !== "inactive") return;
+      // so the journal is covered by then or it ends up in the switcher.
+      if (next === "background" || next === "inactive") {
+        leftAt.current ??= Date.now();
+        setCovered(true);
+        return;
+      }
+      if (next !== "active") return;
+      const away = leftAt.current === null ? 0 : Date.now() - leftAt.current;
+      leftAt.current = null;
+      setCovered(false);
+      // A quick swipe away and back keeps it open; any longer asks again.
+      if (away <= LOCK_GRACE_MS) return;
       setUnlocked(false);
       setCode("");
       setChecking(false);
@@ -105,7 +122,7 @@ export default function LockGate({ children }: { children: ReactNode }) {
       setCheckError(false);
       let ok: boolean;
       try {
-        ok = await verifyPasscode(code, stored);
+        ok = (await checkRememberedPasscode(code, stored)) ?? (await verifyPasscode(code, stored));
       } catch {
         if (!cancelled) {
           setCheckError(true);
@@ -127,9 +144,12 @@ export default function LockGate({ children }: { children: ReactNode }) {
         // that we know the code. Upgrade-only, and never at the cost of the
         // unlock itself.
         try {
+          let current = stored;
           if (needsPasscodeUpgrade(stored)) {
-            await updateRef.current({ passcode: await hashPasscode(code) });
+            current = await hashPasscode(code);
+            await updateRef.current({ passcode: current });
           }
+          await rememberPasscode(code, current);
         } catch (err) {
           console.error("Passcode upgrade failed", err);
         }
@@ -172,12 +192,14 @@ export default function LockGate({ children }: { children: ReactNode }) {
   }, [locked]);
 
   const waiting = waitSeconds > 0;
+  const hidden = locked || covered;
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flex: 1, display: locked ? "none" : "flex" }} accessibilityElementsHidden={locked} importantForAccessibility={locked ? "no-hide-descendants" : "auto"}>
+      <View style={{ flex: 1, display: hidden ? "none" : "flex" }} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}>
         {(!locked || hasEntered) && children}
       </View>
+      {covered && !locked && <View style={[styles.safe, { backgroundColor: theme.colors.background }]} />}
       {locked && <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
       <View style={styles.body}>
         <Lock color={theme.colors.mutedForeground} size={20} strokeWidth={1.5} />

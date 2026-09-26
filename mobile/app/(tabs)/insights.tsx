@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Loader2, TriangleAlert } from "lucide-react-native";
+import { TriangleAlert } from "lucide-react-native";
 import { PageTitle, PageUnderline, SectionLabel, Surface, withAlpha } from "@/components/ui";
 import { ENERGY_LABELS } from "@/lib/content";
 import { supabase } from "@/integrations/supabase/client";
@@ -131,7 +131,7 @@ export default function InsightsScreen() {
           </Text>
         ) : loading ? (
           <View style={styles.statusRow}>
-            <Loader2 color={theme.colors.mutedForeground} size={16} />
+            <ActivityIndicator color={theme.colors.mutedForeground} size="small" />
             <Text style={[styles.statusText, { color: theme.colors.mutedForeground }]}>
               Reading your patterns…
             </Text>

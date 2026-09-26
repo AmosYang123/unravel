@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Link } from "expo-router";
-import { ArrowLeft, Loader2, Lock, TriangleAlert } from "lucide-react-native";
+import { ArrowLeft, Lock, TriangleAlert } from "lucide-react-native";
 import { Eyebrow, PageTitle, PageUnderline, SectionLabel, Surface, withAlpha } from "@/components/ui";
 import { supabase } from "@/integrations/supabase/client";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
@@ -124,7 +124,7 @@ export default function ImpactScreen() {
 
       {loading && (
         <View style={styles.statusRow}>
-          <Loader2 color={theme.colors.mutedForeground} size={16} />
+          <ActivityIndicator color={theme.colors.mutedForeground} size="small" />
           <Text style={[styles.statusText, { color: theme.colors.mutedForeground }]}>Reading the numbers…</Text>
         </View>
       )}

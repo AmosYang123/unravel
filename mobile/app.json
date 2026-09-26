@@ -16,7 +16,7 @@
     "android": {
       "package": "com.unravel.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F7F5F2",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -41,8 +41,10 @@
           "image": "./assets/splash-icon.png",
           "backgroundColor": "#f7f5f2",
           "dark": {
-            "backgroundColor": "#161413"
-          }
+            "backgroundColor": "#161413",
+            "image": "./assets/splash-icon-dark.png"
+          },
+          "imageWidth": 120
         }
       ],
       [

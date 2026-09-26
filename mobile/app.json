@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.unravel.app",
+      "bundleIdentifier": "com.amosyang.unravel",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -23,6 +23,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
@@ -67,6 +69,12 @@
       "eas": {
         "projectId": "24e6c786-7d6d-4657-b639-dd8990224354"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/24e6c786-7d6d-4657-b639-dd8990224354"
     }
   }
 }

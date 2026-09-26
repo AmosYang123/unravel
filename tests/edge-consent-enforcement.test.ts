@@ -19,7 +19,7 @@ it.each(["entry-advice", "transcribe-voice", "normalize-tag", "spotify-songs"])(
   const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("External calls must not occur"));
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) },
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true }, error: null }) }) }) }),
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true }, error: null }) }) }), update: () => ({ eq: async () => ({ error: null }) }) }),
   };
   let handler: ((request: Request) => Promise<Response>) | undefined;
   const deno = {
@@ -42,7 +42,7 @@ it("article-recs saves a local library shelf without external calls when current
     auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) },
     rpc: async () => ({ data: true, error: null }),
     from: (table: string) => table === "profiles"
-      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true }, error: null }) }) }) }
+      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true }, error: null }) }) }), update: () => ({ eq: async () => ({ error: null }) }) }
       : { select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }), insert },
   };
   let handler: ((request: Request) => Promise<Response>) | undefined;

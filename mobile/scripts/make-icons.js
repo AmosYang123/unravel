@@ -19,8 +19,11 @@ const THEMES = {
 // Ball centre in the logo is about (200, 192); the thread ends at y≈650.
 const BALL = { x: 200, y: 192 };
 const BOTTOM = 650;
-const SCALE = 1.2;
-const BALL_Y = 1024 - 40 - (BOTTOM - BALL.y) * SCALE;
+// The ball is centred left to right; the whole drawing, ball and thread, is
+// centred top to bottom so the space above and below it matches.
+const SCALE = 1.15;
+const TOP = (1024 - 651 * SCALE) / 2;
+const BALL_Y = TOP + BALL.y * SCALE;
 
 const hex = (h) => Jimp.cssColorToHex(h);
 

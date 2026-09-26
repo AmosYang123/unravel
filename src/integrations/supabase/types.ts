@@ -196,6 +196,7 @@ export type Database = {
           reminder_email_enabled: boolean
           reminder_mode: string
           reminder_time: string
+          seen_article_urls: string[]
           show_mood_in_history: boolean
           theme: string
           timezone: string
@@ -226,6 +227,7 @@ export type Database = {
           reminder_email_enabled?: boolean
           reminder_mode?: string
           reminder_time?: string
+          seen_article_urls?: string[]
           show_mood_in_history?: boolean
           theme?: string
           timezone?: string
@@ -256,6 +258,7 @@ export type Database = {
           reminder_email_enabled?: boolean
           reminder_mode?: string
           reminder_time?: string
+          seen_article_urls?: string[]
           show_mood_in_history?: boolean
           theme?: string
           timezone?: string

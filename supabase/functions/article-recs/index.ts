@@ -9,7 +9,13 @@ import { buildShelves, shelfSignalText, type EntrySignals, type ReaderProfile, t
 const FRESH_HOURS = 24;
 
 /** Added to a shelf's query on refresh, so the same search doesn't return the same page. */
-const REFRESH_ANGLES = ["ideas", "advice", "real stories", "guide", "for beginners", "what helps", "tips"];
+const REFRESH_ANGLES = [
+  "ideas", "advice", "real stories", "guide", "for beginners", "what helps", "tips",
+  "mistakes to avoid", "how to", "examples", "first-hand experience", "questions to ask",
+];
+
+/** How many shown articles are remembered and kept off the shelf. */
+const SEEN_LIMIT = 150;
 
 const GOOGLE_CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
 // Google's Custom Search JSON API takes no new customers, so Tavily is the
@@ -110,7 +116,7 @@ async function runSearch(provider: SearchProvider, query: string, signal: AbortS
     const res = await fetch(TAVILY_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${provider.key}` },
-      body: JSON.stringify({ query, max_results: 10, search_depth: "basic", safe_search: true }),
+      body: JSON.stringify({ query, max_results: 15, search_depth: "basic", safe_search: true }),
       signal,
     });
     if (!res.ok) {
@@ -248,6 +254,14 @@ Deno.serve(async (req) => {
       return json({ error: "Too many requests right now — try again in a moment." }, 429);
     }
 
+    // Everything they were shown lately, so a new shelf is actually new.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("seen_article_urls")
+      .eq("id", user.id)
+      .maybeSingle();
+    const seenBefore: string[] = Array.isArray(profile?.seen_article_urls) ? profile.seen_article_urls : [];
+
     // What this reader's shelf is made of: their first-run answers, plus what
     // their entries point at when they have allowed that. Used for the live
     // search and to keep the library fallback on the same subjects.
@@ -295,6 +309,13 @@ Deno.serve(async (req) => {
         }
         return json({ error: GENERIC_ERROR }, 400);
       }
+      const seenNow = [...new Set([...rows.map((r) => r.url), ...seenBefore])].slice(0, SEEN_LIMIT);
+      const { error: seenError } = await supabase
+        .from("profiles")
+        .update({ seen_article_urls: seenNow })
+        .eq("id", user.id);
+      // Only the no-repeat memory is lost; the shelf itself is saved.
+      if (seenError) console.error("article-recs seen list update failed:", seenError.message);
       if (previousIds.length) {
         const { error: deleteError } = await supabase
           .from("article_recs")
@@ -321,7 +342,7 @@ Deno.serve(async (req) => {
       if (cached?.length && !refresh) {
         return json({ items: cached, generatedAt: cached[0].created_at, cached: true, stale: true });
       }
-      const excludeUrls = new Set((cached ?? []).map((row) => row.url as string));
+      const excludeUrls = new Set([...(cached ?? []).map((row) => row.url as string), ...seenBefore]);
       const rows = toRows(libraryShelf(signalText, toShelfRequests(shelves), { excludeUrls }));
       if (!rows.length) {
         if (cached?.length) {
@@ -345,7 +366,7 @@ Deno.serve(async (req) => {
         : null;
     if (!provider) return fallback("no search provider key is set (TAVILY_API_KEY or GOOGLE_CSE_*)");
 
-    const shown = new Set((cached ?? []).map((row) => row.url as string));
+    const shown = new Set([...(cached ?? []).map((row) => row.url as string), ...seenBefore]);
     const angled = (shelf: Shelf) => {
       if (!refresh) return shelf;
       const angle = REFRESH_ANGLES[Math.floor(Math.random() * REFRESH_ANGLES.length)];
@@ -358,7 +379,7 @@ Deno.serve(async (req) => {
     if (rows.length < 4) {
       // Too thin on its own — top up from the hand-checked library.
       const seen = new Set(rows.map((r) => r.url));
-      const topUp = toRows(libraryShelf(signalText, toShelfRequests(shelves))).filter(
+      const topUp = toRows(libraryShelf(signalText, toShelfRequests(shelves), { excludeUrls: shown })).filter(
         (r) => !seen.has(r.url),
       );
       if (!rows.length) return fallback("search returned no usable articles");

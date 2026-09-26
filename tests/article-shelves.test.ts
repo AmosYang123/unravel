@@ -6,7 +6,10 @@ import { hasSharingConsent } from "../supabase/functions/_shared/sharing-consent
 import { libraryShelf } from "../supabase/functions/article-recs/library";
 import { buildShelves, shelfSignalText } from "../supabase/functions/article-recs/shelves";
 
-afterEach(() => vi.restoreAllMocks());
+/** What the profile says was shown before, and what the function writes back. */
+let seenList: string[] = [];
+const profileUpdate = vi.fn((_patch: unknown) => ({ eq: async () => ({ error: null }) }));
+afterEach(() => { vi.restoreAllMocks(); seenList = []; profileUpdate.mockClear(); });
 
 const reader = { yearLevel: "upper", focus: ["school"], goals: [], interests: ["student council", "drawing"] };
 
@@ -32,7 +35,7 @@ it("searches with Tavily when its key is set, one query per shelf", async () => 
     auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) },
     rpc: async () => ({ data: true, error: null }),
     from: (table: string) => table === "profiles"
-      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true, ai_consent_version: "2026-09-11" }, error: null }) }) }) }
+      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true, ai_consent_version: "2026-09-11", seen_article_urls: seenList }, error: null }) }) }), update: profileUpdate }
       : { select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }), insert },
   };
   const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
@@ -66,6 +69,45 @@ it("searches with Tavily when its key is set, one query per shelf", async () => 
   expect(council.every((i) => i.title.startsWith("student council"))).toBe(true);
 });
 
+it("never brings back an article shown on an earlier shelf, and remembers the new ones", async () => {
+  seenList = ["https://example.org/student-2", "https://example.org/drawing-1"];
+  const insert = vi.fn((rows: unknown[]) => ({ select: async () => ({ data: rows, error: null }) }));
+  const client = {
+    auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) },
+    rpc: async () => ({ data: true, error: null }),
+    from: (table: string) => table === "profiles"
+      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true, ai_consent_version: "2026-09-11", seen_article_urls: seenList }, error: null }) }) }), update: profileUpdate }
+      : { select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }), insert },
+  };
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    const { query } = JSON.parse(String(init?.body)) as { query: string };
+    const slug = query.split(" ")[0];
+    return new Response(JSON.stringify({ results: [1, 2, 3, 4].map((n) => ({
+      title: `${query} ${n}`, url: `https://example.org/${slug}-${n}`, content: "About it.",
+    })) }), { status: 200 });
+  });
+  let handler: ((r: Request) => Promise<Response>) | undefined;
+  const deno = {
+    env: { get: (key: string) => (key === "TAVILY_API_KEY" ? "tvly-test" : key.startsWith("GOOGLE") ? undefined : "configured") },
+    serve: (cb: (r: Request) => Promise<Response>) => { handler = cb; },
+  };
+  const source = readFileSync("supabase/functions/article-recs/index.ts", "utf8").replace(/^import .*;\n/gm, "");
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+  new Function("createClient", "Deno", "z", "hasSharingConsent", "libraryShelf", "buildShelves", "shelfSignalText", compiled)(
+    () => client, deno, z, hasSharingConsent, libraryShelf, buildShelves, shelfSignalText,
+  );
+
+  const res = await handler!(new Request("https://test/article-recs", {
+    method: "POST", headers: { Authorization: "Bearer t" }, body: JSON.stringify({ suggestions: true, reader, refresh: true }),
+  }));
+  const body = (await res.json()) as { items: { url: string }[] };
+
+  expect(body.items.some((i) => seenList.includes(i.url))).toBe(false);
+  const saved = (profileUpdate.mock.calls[0][0] as { seen_article_urls: string[] }).seen_article_urls;
+  expect(saved.slice(0, body.items.length)).toEqual(body.items.map((i) => i.url));
+  expect(saved).toEqual(expect.arrayContaining(seenList));
+});
+
 it("gives new articles on refresh instead of the ones just shown", async () => {
   const shownUrl = "https://example.org/student-1";
   const insert = vi.fn((rows: unknown[]) => ({ select: async () => ({ data: rows, error: null }) }));
@@ -74,7 +116,7 @@ it("gives new articles on refresh instead of the ones just shown", async () => {
     auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) },
     rpc: async () => ({ data: true, error: null }),
     from: (table: string) => table === "profiles"
-      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true, ai_consent_version: "2026-09-11" }, error: null }) }) }) }
+      ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ai_suggestions_enabled: true, ai_consent_version: "2026-09-11", seen_article_urls: seenList }, error: null }) }) }), update: profileUpdate }
       : {
           select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [cachedRow], error: null }) }) }) }),
           insert,

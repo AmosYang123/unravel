@@ -42,18 +42,6 @@ describe("native reminder scheduling", () => {
     expect(os.request).not.toHaveBeenCalled();
     expect(result.current.error).toBeNull();
   });
-  it("sends an immediate test notification without changing the repeating schedule", async () => {
-    const { result } = renderHook(() => useDeviceReminders(settings));
-    let sent = false;
-    await act(async () => { sent = await result.current.sendTestNotification(); });
-    expect(sent).toBe(true);
-    expect(os.schedule).toHaveBeenCalledOnce();
-    expect(os.schedule.mock.calls[0][0]).toEqual(expect.objectContaining({
-      content: expect.objectContaining({ title: "A moment for you", data: { kind: "check-in-reminder", url: "/write?mode=short" } }),
-      trigger: null,
-    }));
-    expect(os.store).not.toHaveBeenCalled();
-  });
   it("shows OS scheduling failures and can retry the same schedule", async () => {
     os.schedule.mockRejectedValueOnce(new Error("OS refused"));
     vi.spyOn(console, "error").mockImplementation(() => {});

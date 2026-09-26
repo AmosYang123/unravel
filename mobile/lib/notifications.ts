@@ -352,40 +352,7 @@ export function useDeviceReminders(settings: Settings | null) {
     [settings],
   );
 
-  const sendTestNotification = useCallback(async () => {
-    if (!SCHEDULING_SUPPORTED || state.busy) return false;
-    set({ busy: true, error: null });
-    try {
-      await ensureAndroidChannel();
-      const current = await Notifications.getPermissionsAsync();
-      let permissionNow = toPermission(current);
-      if (permissionNow !== "granted" && current.canAskAgain !== false) {
-        permissionNow = toPermission(await Notifications.requestPermissionsAsync({
-          ios: { allowAlert: true, allowSound: true, allowBadge: false },
-        }));
-      }
-      set({ permission: permissionNow });
-      if (permissionNow !== "granted") return false;
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: REMINDER_TITLE,
-          body: settings?.discreetNotifications === false ? REMINDER_BODY_PLAIN : REMINDER_BODY_DISCREET,
-          data: { kind: REMINDER_KIND, url: REMINDER_ROUTE },
-          sound: "default",
-        },
-        trigger: null,
-      });
-      return true;
-    } catch (err) {
-      console.error("Could not send test notification", err);
-      set({ error: "Couldn't send a test notification. Please try again." });
-      return false;
-    } finally {
-      set({ busy: false });
-    }
-  }, [settings?.discreetNotifications]);
-
-  return { enabled, permission, loading, busy, error, setEnabled, sendTestNotification };
+  return { enabled, permission, loading, busy, error, setEnabled };
 }
 
 /**

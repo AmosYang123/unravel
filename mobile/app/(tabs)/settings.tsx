@@ -282,24 +282,6 @@ const REMINDER_DAY_LABELS = [
   { short: "S", full: "Saturday" },
 ];
 
-const TEST_SENT = "Sent. Check your inbox (and spam).";
-const TEST_FAILED = "That didn't send. Try again in a moment.";
-
-/** The function's own wording when it has one, never its internals. */
-const testFailureMessage = async (error: unknown): Promise<string> => {
-  const context = (error as { context?: Response }).context;
-  if (!context || typeof context.text !== "function") return TEST_FAILED;
-  try {
-    const parsed: unknown = JSON.parse(await context.text());
-    if (parsed && typeof parsed === "object" && "error" in parsed && typeof parsed.error === "string") {
-      return parsed.error;
-    }
-  } catch {
-    /* fall through to the generic line */
-  }
-  return TEST_FAILED;
-};
-
 function RemindersSection() {
   const { theme } = useTheme();
   const styles = useStyles(createStyles);
@@ -311,13 +293,8 @@ function RemindersSection() {
     setEnabled: setPhoneEnabled,
     busy: phoneBusy,
     error: phoneError,
-    sendTestNotification,
   } = useDeviceReminders(settings);
   const [open, setOpen] = useState(false);
-  const [testsOpen, setTestsOpen] = useState(false);
-  const [testState, setTestState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [testMessage, setTestMessage] = useState("");
-  const [notificationTestState, setNotificationTestState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [timeInput, setTimeInput] = useState(settings.reminderTime);
   useEffect(() => setTimeInput(settings.reminderTime), [settings.reminderTime]);
   const saveTime = async () => {
@@ -343,21 +320,6 @@ function RemindersSection() {
       ? "Off in iPhone Settings. Tap Open Settings, then Notifications, and turn on Allow Notifications."
       : "A quiet notification at your reminder time.");
 
-  const sendTest = async () => {
-    setTestState("sending");
-    try {
-      const data = await invokeAuthedFunction<{ sent?: boolean; error?: string }>("send-test-reminder");
-      if (data.error) throw new Error(data.error);
-    } catch (error) {
-      console.error("Test reminder failed", error);
-      setTestMessage(error instanceof Error ? error.message : TEST_FAILED);
-      setTestState("error");
-      return;
-    }
-    setTestMessage(TEST_SENT);
-    setTestState("sent");
-  };
-
   const modeLabel = REMINDER_MODES.find((r) => r.id === settings.reminderMode)?.label ?? "Off";
   const summary =
     settings.reminderMode === "manual" ? modeLabel : `${modeLabel}, ${settings.reminderTime}`;
@@ -367,8 +329,6 @@ function RemindersSection() {
   return (
     <>
       <SettingRow title="Reminders" value={`${summary} · ${delivery}`} onPress={() => setOpen(true)} />
-      <Divider />
-      <SettingRow title="Tests" value="Email and app notification" onPress={() => setTestsOpen(true)} />
 
       <Dialog
         visible={open}
@@ -478,48 +438,6 @@ function RemindersSection() {
           </View>
       </Dialog>
 
-      <Dialog
-        visible={testsOpen}
-        onClose={() => setTestsOpen(false)}
-        title="Test reminders"
-        description="Your schedule stays the same."
-      >
-        <Row title="Email" description={`To ${user?.email ?? "your email"}.`}>
-          <Button
-            label={testState === "sending" ? "Sending…" : testState === "sent" ? "Send again" : "Send a test"}
-            variant="ghost"
-            disabled={testState === "sending"}
-            onPress={() => void sendTest()}
-          />
-        </Row>
-        {(testState === "sent" || testState === "error") && (
-          <Text accessibilityLiveRegion="polite" style={[styles.testStatus, {
-            color: testState === "error" ? theme.colors.destructive : theme.colors.mutedForeground,
-          }]}>{testMessage}</Text>
-        )}
-        <Divider />
-        <Row title="App notification" description="To this phone, right now.">
-          <Button
-            label={notificationTestState === "sending" ? "Sending…" : "Send a test"}
-            variant="ghost"
-            disabled={phoneBusy || notificationTestState === "sending"}
-            onPress={() => void (async () => {
-              setNotificationTestState("sending");
-              const sent = await sendTestNotification();
-              setNotificationTestState(sent ? "sent" : "error");
-            })()}
-          />
-        </Row>
-        {(notificationTestState === "sent" || notificationTestState === "error") && (
-          <Text accessibilityLiveRegion="polite" style={[styles.testStatus, {
-            color: notificationTestState === "error" ? theme.colors.destructive : theme.colors.mutedForeground,
-          }]}>
-            {notificationTestState === "sent"
-              ? "Sent. Nothing showed up? Check Notifications in Settings."
-              : (phoneError ?? "Notifications are off. In Settings, tap Notifications and turn on Allow Notifications.")}
-          </Text>
-        )}
-      </Dialog>
     </>
   );
 }
@@ -1305,7 +1223,6 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   fieldLabel: { marginTop: 12, fontFamily: fonts.body, fontSize: 13 },
   fullWidthInput: { marginTop: 6, width: "100%" },
   errorText: { marginTop: 10, fontFamily: fonts.body, fontSize: 13 },
-  testStatus: { marginTop: -6, marginBottom: 14, fontFamily: fonts.body, fontSize: 13, lineHeight: 19 },
   mutedValue: { fontFamily: fonts.body, fontSize: 13 },
   guestBlock: { paddingVertical: 16 },
   guestSubmit: { marginTop: 14, alignSelf: "flex-start" },

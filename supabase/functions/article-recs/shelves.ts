@@ -386,9 +386,9 @@ function interestShelf(interest: string, c: Ctx): Shelf {
   const kind = interestKind(interest);
   const query =
     kind === "movement"
-      ? `${interest} and mental health for ${yearSearch(c)}`
+      ? `${interest} tips and training ideas for ${yearSearch(c)}`
       : kind === "making"
-        ? `${interest} creativity and mental health for ${yearSearch(c)}`
+        ? `${interest} ideas and inspiration for ${yearSearch(c)}`
         : `${interest} tips and advice for ${yearSearch(c)}`;
   return {
     label: titleCase(interest),
@@ -429,7 +429,7 @@ function toCtx(reader: ReaderProfile, signals: EntrySignals | null, concerns: st
 }
 
 /**
- * The shelf, in order: what they are carrying first, then what they are into.
+ * The shelf, in order: what they are into first, then what they are carrying.
  * Everything is capped at MAX_SHELVES so the page stays a page.
  */
 export function buildShelves(

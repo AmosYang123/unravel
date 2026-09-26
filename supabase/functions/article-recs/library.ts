@@ -426,6 +426,9 @@ export type ShelfRequest = {
 /** How much a tag matching the shelf's own words outweighs a general match. */
 const MATCH_WEIGHT = 10;
 
+/** The category behind shelves named after one of the reader's interests. */
+const INTEREST_LIBRARY = "Things you're into";
+
 /**
  * Fill the given shelves from the verified library, for when live search is
  * unavailable. The shelves come from whatever the reader's own signals asked
@@ -437,8 +440,6 @@ const MATCH_WEIGHT = 10;
  * never comes back thinner than asked. No article appears twice on one page,
  * and a shelf left with nothing is dropped rather than shown empty.
  */
-const INTEREST_LIBRARY = "Things you're into";
-
 export function libraryShelf(
   signalText: string,
   shelves: ShelfRequest[],

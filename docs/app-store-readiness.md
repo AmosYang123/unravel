@@ -64,7 +64,7 @@ Do not select “Data Not Collected.” Account-linked data includes anonymous S
 | Journal text, transcripts, addenda, tags / Other User Content | Supabase; Groq after consent | App Functionality, Product Personalization; linked |
 | Voice / Audio Data | Supabase; Groq for transcription (also automatic after saving voice entries with AI enabled) | App Functionality; linked |
 | Mood, energy and wellbeing content / Health, Sensitive Info where applicable | Supabase; Groq after consent | Functionality, Personalization and Analytics for admin mood/usage reports; linked |
-| Interests, goals, school year, music preferences / Other Data and applicable content categories | Supabase; Groq, Google Custom Search, Deezer for enabled features | Personalization; linked internally even if no account ID is sent to provider |
+| Interests, goals, school year, music preferences / Other Data and applicable content categories | Supabase; Groq, Tavily or Google Custom Search, Deezer for enabled features | Personalization; linked internally even if no account ID is sent to provider |
 | Entry counts/times, breathing and pseudonymous longitudinal trends / Product Interaction | Supabase and restricted administrator dashboard | Functionality and Analytics; account linkage remains possible |
 | IP/request metadata, errors / Diagnostics or Other Data as applicable | Hosting, Supabase, Google, Groq, Deezer and destination websites | Verify actual retention, association and purposes with each provider |
 

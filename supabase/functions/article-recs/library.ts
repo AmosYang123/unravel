@@ -437,6 +437,8 @@ const MATCH_WEIGHT = 10;
  * never comes back thinner than asked. No article appears twice on one page,
  * and a shelf left with nothing is dropped rather than shown empty.
  */
+const INTEREST_LIBRARY = "Things you're into";
+
 export function libraryShelf(
   signalText: string,
   shelves: ShelfRequest[],
@@ -468,7 +470,10 @@ export function libraryShelf(
             item.tags.reduce((s, tag) => (text.includes(tag) ? s + 1 : s), 0),
         }))
         .sort((a, b) => b.score - a.score)
-        .filter((s) => !used.has(s.item.url));
+        .filter((s) => !used.has(s.item.url))
+        // A shelf named after one of their interests only holds articles that
+        // are actually about it; otherwise its heading would be a false claim.
+        .filter((s) => shelf.library !== INTEREST_LIBRARY || !own || s.score >= MATCH_WEIGHT);
       const unseen = inCategory.filter((s) => !excludeUrls.has(s.item.url));
       const alreadySeen = inCategory.filter((s) => excludeUrls.has(s.item.url));
       const picked = [...unseen, ...alreadySeen].slice(0, limitPerCategory);

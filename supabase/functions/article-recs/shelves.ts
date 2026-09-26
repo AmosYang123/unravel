@@ -48,7 +48,7 @@ export type Shelf = {
 /** Four is a shelf. Eight is a reading list nobody opens. */
 const MAX_SHELVES = 4;
 /** A second hobby shelf only once they have listed this many interests. */
-const INTERESTS_FOR_SECOND_SHELF = 4;
+const INTERESTS_FOR_SECOND_SHELF = 2;
 
 /** Mirrors FOCUS_AREAS in src/lib/onboarding.ts; an unknown id reads as itself. */
 const FOCUS_LABELS: Record<string, string> = {
@@ -389,13 +389,13 @@ function interestShelf(interest: string, c: Ctx): Shelf {
       ? `${interest} and mental health for ${yearSearch(c)}`
       : kind === "making"
         ? `${interest} creativity and mental health for ${yearSearch(c)}`
-        : `${interest} as a hobby and mental health for ${yearSearch(c)}`;
+        : `${interest} tips and advice for ${yearSearch(c)}`;
   return {
     label: titleCase(interest),
     library: "Things you're into",
     query,
-    note: `You put ${interest} down as one of yours. This one starts there rather than with a hard week.`,
-    why: `Here because ${interest} is yours — not because something went wrong.`,
+    note: `Because you're into ${interest}.`,
+    why: `Picked for your interest in ${interest}.`,
     match: interest,
   };
 }
@@ -467,7 +467,8 @@ export function buildShelves(
     match: YEAR_SEARCH[c.year] ?? "",
   }));
 
-  return [...themed, ...interests.map((i) => interestShelf(i, c))].slice(0, MAX_SHELVES);
+  // What they are into leads: it is the part of the shelf that is most theirs.
+  return [...interests.map((i) => interestShelf(i, c)), ...themed].slice(0, MAX_SHELVES);
 }
 
 /** Words the offline library scores its picks against, when live search is out. */

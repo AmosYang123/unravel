@@ -8,6 +8,9 @@ import { buildShelves, shelfSignalText, type EntrySignals, type ReaderProfile, t
 const FRESH_HOURS = 72;
 
 const GOOGLE_CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
+// Google's Custom Search JSON API takes no new customers, so Tavily is the
+// provider a new setup uses. Whichever key is set decides; Tavily wins.
+const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 // Google CSE's free tier is 100 queries/day with no per-second limit that
 // matters here, so shelf searches are fired back to back — just the abort
 // timeout is kept.
@@ -93,26 +96,57 @@ const stripTags = (s: string) => s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").
 const toShelfRequests = (shelves: Shelf[]): ShelfRequest[] =>
   shelves.map((s) => ({ label: s.label, library: s.library, note: s.note, why: s.why, match: s.match }));
 
+type SearchProvider =
+  | { kind: "tavily"; key: string }
+  | { kind: "google"; key: string; cx: string };
+
+/** One query to whichever provider is configured, as Google-shaped results. */
+async function runSearch(provider: SearchProvider, query: string, signal: AbortSignal): Promise<GoogleCseResult[] | null> {
+  if (provider.kind === "tavily") {
+    const res = await fetch(TAVILY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${provider.key}` },
+      body: JSON.stringify({ query, max_results: 5, search_depth: "basic", safe_search: true }),
+      signal,
+    });
+    if (!res.ok) {
+      console.error(`article-recs Tavily search failed [${res.status}]`);
+      return null;
+    }
+    const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
+    return (data?.results ?? []).map((r) => ({
+      title: r.title,
+      link: r.url,
+      snippet: r.content?.slice(0, 300),
+      displayLink: (() => {
+        try {
+          return new URL(String(r.url)).hostname.replace(/^www\./, "");
+        } catch {
+          return "";
+        }
+      })(),
+    }));
+  }
+  const url = `${GOOGLE_CSE_ENDPOINT}?key=${encodeURIComponent(provider.key)}&cx=${encodeURIComponent(provider.cx)}&q=${encodeURIComponent(query)}&num=5&safe=active`;
+  const res = await fetch(url, { headers: { Accept: "application/json" }, signal });
+  if (!res.ok) {
+    console.error(`article-recs Google CSE search failed [${res.status}]`);
+    return null;
+  }
+  const data = (await res.json()) as { items?: GoogleCseResult[] };
+  return data?.items ?? [];
+}
+
 /**
  * One shelf's live search. Nothing about the query is logged: it can carry what
  * the reader said they are into, and that is theirs.
  */
-async function searchShelf(apiKey: string, cx: string, shelf: Shelf): Promise<Section | null> {
-  const url = `${GOOGLE_CSE_ENDPOINT}?key=${encodeURIComponent(apiKey)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(shelf.query)}&num=5&safe=active`;
-
+async function searchShelf(provider: SearchProvider, shelf: Shelf): Promise<Section | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GOOGLE_CSE_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      console.error(`article-recs Google CSE search failed [${res.status}]`);
-      return null;
-    }
-    const data = (await res.json()) as { items?: GoogleCseResult[] };
-    const results = data?.items ?? [];
+    const results = await runSearch(provider, shelf.query, controller.signal);
+    if (!results) return null;
     const articles = results
       .filter((r) => typeof r.link === "string" && /^https:\/\//.test(r.link) && r.title)
       .slice(0, 3)
@@ -128,7 +162,7 @@ async function searchShelf(apiKey: string, cx: string, shelf: Shelf): Promise<Se
     if (!articles.length) return null;
     return { category: shelf.label, note: shelf.note, articles };
   } catch (err) {
-    console.error("article-recs Google CSE search errored:", err);
+    console.error("article-recs search errored:", err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -164,19 +198,6 @@ Deno.serve(async (req) => {
     const user = auth?.user;
     if (!user) return json({ error: "Not signed in." }, 401);
 
-    const { data: allowed, error: rateError } = await supabase.rpc("consume_rate_limit", {
-      p_bucket: "article-recs",
-      p_limit: RATE_LIMIT,
-      p_window_seconds: RATE_WINDOW_SECONDS,
-    });
-    if (rateError) {
-      console.error("article-recs rate limit check failed:", rateError.message);
-      return json({ error: GENERIC_ERROR }, 503);
-    }
-    if (!allowed) {
-      return json({ error: "Too many requests right now — try again in a moment." }, 429);
-    }
-
     // The privacy switch is enforced here as well as in the app, so no build of
     // the app can send entry material past it. The stored setting has the last
     // word and the app can only be stricter; a read that fails counts as off,
@@ -204,6 +225,21 @@ Deno.serve(async (req) => {
     const fresh = newest && Date.now() - newest < FRESH_HOURS * 60 * 60 * 1000;
     if (cached?.length && fresh && !refresh) {
       return json({ items: cached, generatedAt: cached[0].created_at, cached: true });
+    }
+
+    // Counted only for real work: a cached shelf is a cheap read, and the app
+    // asks again whenever the entry list reloads.
+    const { data: allowed, error: rateError } = await supabase.rpc("consume_rate_limit", {
+      p_bucket: "article-recs",
+      p_limit: RATE_LIMIT,
+      p_window_seconds: RATE_WINDOW_SECONDS,
+    });
+    if (rateError) {
+      console.error("article-recs rate limit check failed:", rateError.message);
+      return json({ error: GENERIC_ERROR }, 503);
+    }
+    if (!allowed) {
+      return json({ error: "Too many requests right now — try again in a moment." }, 429);
     }
 
     // What this reader's shelf is made of: their first-run answers, plus what
@@ -293,15 +329,18 @@ Deno.serve(async (req) => {
 
     if (!suggestionsOn) return fallback("Personalized external search is off");
 
+    const tavilyKey = Deno.env.get("TAVILY_API_KEY");
     const googleApiKey = Deno.env.get("GOOGLE_CSE_API_KEY");
     const googleCseId = Deno.env.get("GOOGLE_CSE_ID");
-    if (!googleApiKey || !googleCseId) return fallback("GOOGLE_CSE_API_KEY/GOOGLE_CSE_ID is not set");
+    const provider: SearchProvider | null = tavilyKey
+      ? { kind: "tavily", key: tavilyKey }
+      : googleApiKey && googleCseId
+        ? { kind: "google", key: googleApiKey, cx: googleCseId }
+        : null;
+    if (!provider) return fallback("no search provider key is set (TAVILY_API_KEY or GOOGLE_CSE_*)");
 
-    const sections: Section[] = [];
-    for (const shelf of shelves) {
-      const section = await searchShelf(googleApiKey, googleCseId, shelf);
-      if (section) sections.push(section);
-    }
+    const sections = (await Promise.all(shelves.map((shelf) => searchShelf(provider, shelf))))
+      .filter((section): section is Section => section !== null);
 
     const rows = toRows(sections);
     if (rows.length < 4) {

@@ -1,14 +1,27 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
+# Social scrapers fetch pages to build link previews, not to index them.
 User-agent: Twitterbot
 Allow: /
 
 User-agent: facebookexternalhit
 Allow: /
 
+# Only the public pages belong in search. The journal itself is private.
 User-agent: *
-Allow: /
+Allow: /$
+Allow: /privacy
+Allow: /support
+Allow: /terms
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /onboarding
+Disallow: /journal
+Disallow: /write
+Disallow: /history
+Disallow: /entry/
+Disallow: /insights
+Disallow: /reading
+Disallow: /impact
+Disallow: /settings
+Disallow: /breathe
+
+Sitemap: https://officialunravel.vercel.app/sitemap.xml

@@ -13,9 +13,10 @@ it("shows the public home and confirmed operators without loading the journal", 
   expect(screen.getByText("Operated by Amos Yang and Faye Yang.")).toBeTruthy();
   expect(screen.getByRole("link", { name: "Open web journal" }).getAttribute("href")).toBe("/journal");
   expect(screen.queryByText(/Download on the App Store/)).toBeNull();
+  expect(screen.getByRole("link", { name: "Terms" }).getAttribute("href")).toBe("/terms");
 });
 
-it.each([["/privacy", "Privacy policy"], ["/support", "Unravel support"]])("opens %s directly without loading account code", (path, heading) => {
+it.each([["/privacy", "Privacy policy"], ["/support", "Unravel support"], ["/terms", "Terms of use"]])("opens %s directly without loading account code", (path, heading) => {
   render(<MemoryRouter initialEntries={[path!]}><SiteRoutes /></MemoryRouter>);
   expect(screen.getByRole("heading", { name: heading, level: 1 })).toBeTruthy();
   expect(screen.getByText("App owner: Amos Yang and Faye Yang")).toBeTruthy();

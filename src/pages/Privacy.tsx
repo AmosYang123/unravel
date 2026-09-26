@@ -15,7 +15,10 @@ export default function Privacy() {
         </section>
       ))}
       <SupportContact />
-      <Link to="/support" className="inline-block mt-8 underline">Support</Link>
+      <div className="mt-8 flex gap-6">
+        <Link to="/terms" className="underline">Terms of use</Link>
+        <Link to="/support" className="underline">Support</Link>
+      </div>
       <details className="mt-8">
         <summary className="cursor-pointer underline">Font licenses</summary>
         <p className="mt-3 text-sm leading-relaxed">

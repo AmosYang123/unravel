@@ -10,6 +10,7 @@ import { applyAppearance, loadUserData, useSettings } from "@/lib/store";
 
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Support = lazy(() => import("./pages/Support"));
+const Terms = lazy(() => import("./pages/Terms"));
 const Home = lazy(() => import("./pages/Home"));
 const Compose = lazy(() => import("./pages/Compose"));
 const History = lazy(() => import("./pages/History"));
@@ -67,6 +68,7 @@ const App = () => (
             <Routes>
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/support" element={<Support />} />
+              <Route path="/terms" element={<Terms />} />
               <Route path="/auth" element={<AuthPage />} />
               {/* Public: arrives from an email link before a normal sign-in. */}
               <Route path="/reset-password" element={<ResetPassword />} />

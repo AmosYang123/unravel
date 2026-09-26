@@ -5,7 +5,11 @@ import { libraryShelf, type ShelfRequest } from "./library.ts";
 import { buildShelves, shelfSignalText, type EntrySignals, type ReaderProfile, type Shelf } from "./shelves.ts";
 
 
-const FRESH_HOURS = 72;
+// A new shelf each day even without a refresh.
+const FRESH_HOURS = 24;
+
+/** Added to a shelf's query on refresh, so the same search doesn't return the same page. */
+const REFRESH_ANGLES = ["ideas", "advice", "real stories", "guide", "for beginners", "what helps", "tips"];
 
 const GOOGLE_CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
 // Google's Custom Search JSON API takes no new customers, so Tavily is the
@@ -106,7 +110,7 @@ async function runSearch(provider: SearchProvider, query: string, signal: AbortS
     const res = await fetch(TAVILY_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${provider.key}` },
-      body: JSON.stringify({ query, max_results: 5, search_depth: "basic", safe_search: true }),
+      body: JSON.stringify({ query, max_results: 10, search_depth: "basic", safe_search: true }),
       signal,
     });
     if (!res.ok) {
@@ -127,7 +131,7 @@ async function runSearch(provider: SearchProvider, query: string, signal: AbortS
       })(),
     }));
   }
-  const url = `${GOOGLE_CSE_ENDPOINT}?key=${encodeURIComponent(provider.key)}&cx=${encodeURIComponent(provider.cx)}&q=${encodeURIComponent(query)}&num=5&safe=active`;
+  const url = `${GOOGLE_CSE_ENDPOINT}?key=${encodeURIComponent(provider.key)}&cx=${encodeURIComponent(provider.cx)}&q=${encodeURIComponent(query)}&num=10&safe=active`;
   const res = await fetch(url, { headers: { Accept: "application/json" }, signal });
   if (!res.ok) {
     console.error(`article-recs Google CSE search failed [${res.status}]`);
@@ -141,7 +145,7 @@ async function runSearch(provider: SearchProvider, query: string, signal: AbortS
  * One shelf's live search. Nothing about the query is logged: it can carry what
  * the reader said they are into, and that is theirs.
  */
-async function searchShelf(provider: SearchProvider, shelf: Shelf): Promise<Section | null> {
+async function searchShelf(provider: SearchProvider, shelf: Shelf, skip: Set<string>): Promise<Section | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GOOGLE_CSE_TIMEOUT_MS);
   try {
@@ -149,6 +153,8 @@ async function searchShelf(provider: SearchProvider, shelf: Shelf): Promise<Sect
     if (!results) return null;
     const articles = results
       .filter((r) => typeof r.link === "string" && /^https:\/\//.test(r.link) && r.title)
+      // What they were just shown goes, so a refresh brings new reading.
+      .filter((r) => !skip.has(r.link as string))
       .slice(0, 3)
       .map((r) => ({
         title: stripTags(String(r.title)),
@@ -339,7 +345,13 @@ Deno.serve(async (req) => {
         : null;
     if (!provider) return fallback("no search provider key is set (TAVILY_API_KEY or GOOGLE_CSE_*)");
 
-    const sections = (await Promise.all(shelves.map((shelf) => searchShelf(provider, shelf))))
+    const shown = new Set((cached ?? []).map((row) => row.url as string));
+    const angled = (shelf: Shelf) => {
+      if (!refresh) return shelf;
+      const angle = REFRESH_ANGLES[Math.floor(Math.random() * REFRESH_ANGLES.length)];
+      return { ...shelf, query: `${shelf.query} ${angle}` };
+    };
+    const sections = (await Promise.all(shelves.map((shelf) => searchShelf(provider, angled(shelf), shown))))
       .filter((section): section is Section => section !== null);
 
     const rows = toRows(sections);

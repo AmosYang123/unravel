@@ -353,3 +353,37 @@ it("spotify-songs lets the model choose for the entry, from real candidates only
   expect(body.picks[0].reason).toBe("Soft, for an anxious night");
   expect(body.picks.some((p) => p.reason === "made up")).toBe(false);
 });
+
+it("spotify-songs uses the artist the person picked when two share a name", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
+    if (url.includes("/artist/1551/top")) return deezerReply([deezerTrack({ id: 9, title: "Glycerine", artist: { name: "Bush" } })]);
+    return deezerReply([]);
+  });
+  const handler = loadEdgeFunction("spotify-songs", consentingClient());
+
+  const response = await handler(post({ mood: 3, energy: 3, artists: ["Bush"], artistIds: { Bush: 1551 }, seed: 1 }));
+  const body = (await response.json()) as { picks: { title: string }[] };
+
+  expect(request.mock.calls.some(([url]) => String(url).includes("/search/artist"))).toBe(false);
+  expect(body.picks[0].title).toBe("Glycerine");
+});
+
+it("spotify-songs picks the most-followed artist of that name when none was chosen", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
+    if (url.includes("/search/artist")) return deezerReply([
+      { id: 11656353, name: "Bush", nb_fan: 16 }, { id: 1551, name: "Bush", nb_fan: 216726 }, { id: 1049, name: "Kate Bush", nb_fan: 398888 },
+    ]);
+    if (url.includes("/artist/1551/top")) return deezerReply([deezerTrack({ id: 9, title: "Glycerine", artist: { name: "Bush" } })]);
+    return deezerReply([]);
+  });
+  const handler = loadEdgeFunction("spotify-songs", consentingClient());
+
+  await handler(post({ mood: 3, energy: 3, artists: ["Bush"], seed: 1 }));
+
+  expect(request.mock.calls.some(([url]) => String(url).includes("/artist/1551/top"))).toBe(true);
+  expect(request.mock.calls.some(([url]) => String(url).includes("/artist/11656353"))).toBe(false);
+});

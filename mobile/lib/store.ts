@@ -35,6 +35,7 @@ export const defaultSettings: Settings = {
   passcode: "",
   musicTastes: [],
   musicArtists: [],
+  musicArtistIds: {},
   showMoodInHistory: true,
   yearLevel: "",
   focusAreas: [],
@@ -218,6 +219,7 @@ type ProfileRow = {
   passcode: string | null;
   music_tastes: string[] | null;
   music_artists: string[] | null;
+  music_artist_ids?: unknown;
   show_mood_in_history: boolean | null;
   year_level: string | null;
   focus_areas: string[] | null;
@@ -225,6 +227,14 @@ type ProfileRow = {
   interests: string[] | null;
   onboarded_at: string | null;
 };
+
+/** Only name → positive integer id pairs survive; anything else in the column is ignored. */
+export const artistIdsFrom = (value: unknown): Record<string, number> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? Object.fromEntries(
+        Object.entries(value).filter(([, id]) => Number.isInteger(id) && (id as number) > 0),
+      ) as Record<string, number>
+    : {};
 
 const toSettings = (row: ProfileRow): Settings => ({
   name: row.name ?? "",
@@ -243,6 +253,7 @@ const toSettings = (row: ProfileRow): Settings => ({
   passcode: row.passcode ?? "",
   musicTastes: row.music_tastes ?? [],
   musicArtists: row.music_artists ?? [],
+  musicArtistIds: artistIdsFrom(row.music_artist_ids),
   showMoodInHistory: row.show_mood_in_history ?? true,
   // All five are null on every profile written before onboarding existed, and
   // stay null for anyone who skips, so each falls back to "not said".
@@ -274,6 +285,7 @@ const toProfileRow = (patch: Partial<Settings>): ProfileUpdate => {
   if ("passcode" in patch) row.passcode = patch.passcode ?? "";
   if ("musicTastes" in patch) row.music_tastes = patch.musicTastes;
   if ("musicArtists" in patch) row.music_artists = patch.musicArtists;
+  if ("musicArtistIds" in patch) row.music_artist_ids = patch.musicArtistIds;
   if ("showMoodInHistory" in patch) row.show_mood_in_history = patch.showMoodInHistory;
   // "" is how the client says "not answered", and null is how the column says
   // it, so the two empties are kept in step rather than storing a blank string.

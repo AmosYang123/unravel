@@ -36,6 +36,7 @@ import { invokeAuthedFunction } from "@/lib/edgeFunctions";
 import { MIN_PASSWORD_LENGTH, passwordMeetsRule, useAuth } from "@/lib/auth";
 import { useDeviceReminders } from "@/lib/notifications";
 import { rememberPasscode } from "@/lib/passcodeShortcut";
+import { matchIconToTheme } from "@/lib/appIcon";
 import {
   fetchAllEntries,
   hashPasscode,
@@ -157,6 +158,7 @@ function AppearanceSection() {
                 onPress={() => {
                   setTheme(t.id);
                   void update({ theme: t.id });
+                  void matchIconToTheme(t.id);
                 }}
                 style={[
                   styles.themeCard,

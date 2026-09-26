@@ -63,7 +63,60 @@
           "enableBackgroundRemoteNotifications": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Blush",
+            "ios": "./assets/icons/blush.png",
+            "android": {
+              "foregroundImage": "./assets/icons/blush-android.png",
+              "backgroundColor": "#faeff2"
+            }
+          },
+          {
+            "name": "Mist",
+            "ios": "./assets/icons/mist.png",
+            "android": {
+              "foregroundImage": "./assets/icons/mist-android.png",
+              "backgroundColor": "#ebf3f9"
+            }
+          },
+          {
+            "name": "Lilac",
+            "ios": "./assets/icons/lilac.png",
+            "android": {
+              "foregroundImage": "./assets/icons/lilac-android.png",
+              "backgroundColor": "#f5f0f9"
+            }
+          },
+          {
+            "name": "Sage",
+            "ios": "./assets/icons/sage.png",
+            "android": {
+              "foregroundImage": "./assets/icons/sage-android.png",
+              "backgroundColor": "#eef7f1"
+            }
+          },
+          {
+            "name": "Dusk",
+            "ios": "./assets/icons/dusk.png",
+            "android": {
+              "foregroundImage": "./assets/icons/dusk-android.png",
+              "backgroundColor": "#181721"
+            }
+          },
+          {
+            "name": "Ink",
+            "ios": "./assets/icons/ink.png",
+            "android": {
+              "foregroundImage": "./assets/icons/ink-android.png",
+              "backgroundColor": "#161413"
+            }
+          }
+        ]
+      ]
     ],
     "scheme": "unravel",
     "extra": {

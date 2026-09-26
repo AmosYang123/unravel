@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import { Button, Chip, PageTitle, PageUnderline } from "@/components/ui";
+import { Button, Chip, Dialog, PageTitle, PageUnderline } from "@/components/ui";
+import { findArtistChoices, type ArtistChoice } from "@/lib/music";
 import { GENRES } from "@/lib/content";
 import { currentSettings, useSettings } from "@/lib/store";
 import { applyTagOutcomes, keepOutcomesFor, replaceTag, resolveTags, splitTagInput, tagAction, tagNotice, type TagOutcome } from "@/lib/tags";
@@ -18,6 +19,19 @@ export default function MusicScreen() {
   const [artistDraft, setArtistDraft] = useState("");
   const [checking, setChecking] = useState(false);
   const [notices, setNotices] = useState<TagOutcome[]>([]);
+  // Names that match more than one artist, asked about one at a time.
+  const [toConfirm, setToConfirm] = useState<{ name: string; choices: ArtistChoice[] }[]>([]);
+  const asking = toConfirm[0];
+
+  const chooseArtist = (name: string, id: number) => {
+    void update({ musicArtistIds: { ...currentSettings().musicArtistIds, [name]: id } });
+    setToConfirm((queue) => queue.slice(1));
+  };
+
+  const removeArtist = (artist: string) => {
+    const { [artist]: _dropped, ...ids } = settings.musicArtistIds;
+    void update({ musicArtists: settings.musicArtists.filter((item) => item !== artist), musicArtistIds: ids });
+  };
 
   const toggleTaste = (genre: string) => void update({
     musicTastes: settings.musicTastes.includes(genre)
@@ -33,11 +47,19 @@ export default function MusicScreen() {
     setArtistDraft("");
     setNotices([]);
     setChecking(true);
+    const before = settings.musicArtists;
     try {
       await update({ musicArtists: [...settings.musicArtists, ...added] });
       const outcomes = keepOutcomesFor(terms, added, await resolveTags("artist", raw, settings.aiSuggestionsEnabled));
       await update({ musicArtists: applyTagOutcomes(currentSettings().musicArtists, added, outcomes) });
       setNotices(outcomes.filter((outcome) => outcome.status !== "kept"));
+      // Two artists with one name: ask which. Only with suggestions on, since
+      // the lookup sends the name to Deezer.
+      if (settings.aiSuggestionsEnabled) {
+        const fresh = currentSettings().musicArtists.filter((name) => !before.includes(name));
+        const found = await Promise.all(fresh.map(async (name) => ({ name, choices: await findArtistChoices(name) })));
+        setToConfirm((queue) => [...queue, ...found.filter((f) => f.choices.length > 1)]);
+      }
     } finally {
       setChecking(false);
     }
@@ -66,13 +88,44 @@ export default function MusicScreen() {
           const action = tagAction(outcome);
           return <View key={outcome.original} style={styles.notice}><Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>{tagNotice(outcome)}</Text>{action && <Pressable onPress={() => { void update({ musicArtists: replaceTag(currentSettings().musicArtists, outcome.value, action.value) }); setNotices((items) => items.filter((item) => item !== outcome)); }}><Text style={{ color: theme.colors.foreground }}>{action.label}</Text></Pressable>}</View>;
         })}
-        <View style={styles.chips}>{settings.musicArtists.map((artist) => <Chip key={artist} label={artist} selected accessibilityLabel={`Remove ${artist}`} onPress={() => void update({ musicArtists: settings.musicArtists.filter((item) => item !== artist) })} />)}</View>
+        <View style={styles.chips}>{settings.musicArtists.map((artist) => <Chip key={artist} label={artist} selected accessibilityLabel={`Remove ${artist}`} onPress={() => removeArtist(artist)} />)}</View>
       </ScrollView>
+      <Dialog
+        visible={Boolean(asking)}
+        onClose={() => setToConfirm((queue) => queue.slice(1))}
+        title={asking ? `Which ${asking.name}?` : ""}
+        description="There's more than one artist with this name."
+      >
+        {asking?.choices.slice(0, 4).map((choice) => (
+          <Pressable
+            key={choice.id}
+            onPress={() => chooseArtist(asking.name, choice.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`${choice.name}, ${formatFans(choice.fans)}`}
+            style={[styles.choice, { borderColor: theme.colors.border }]}
+          >
+            {choice.picture ? <Image source={{ uri: choice.picture }} style={styles.choicePicture} /> : <View style={[styles.choicePicture, { backgroundColor: theme.colors.secondary }]} />}
+            <View style={styles.choiceText}>
+              <Text style={[styles.choiceName, { color: theme.colors.foreground }]}>{choice.name}</Text>
+              <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
+                {formatFans(choice.fans)} · {choice.albums} {choice.albums === 1 ? "album" : "albums"}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </Dialog>
     </SafeAreaView>
   );
 }
 
+const formatFans = (fans: number) =>
+  fans >= 1_000_000 ? `${(fans / 1_000_000).toFixed(1)}M fans` : fans >= 1_000 ? `${Math.round(fans / 1_000)}K fans` : `${fans} fans`;
+
 const createStyles = (fonts: FontSet) => StyleSheet.create({
+  choice: { flexDirection: "row", alignItems: "center", gap: 12, padding: 10, marginTop: 10, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
+  choicePicture: { width: 48, height: 48, borderRadius: 24 },
+  choiceText: { flex: 1 },
+  choiceName: { fontFamily: fonts.bodySemiBold, fontSize: 15 },
   safe: { flex: 1 }, content: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 48 }, underline: { marginTop: 12 },
   back: { minHeight: 44, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 4 }, backText: { fontFamily: fonts.body, fontSize: 14 },
   intro: { marginTop: 24, fontFamily: fonts.body, fontSize: 14, lineHeight: 21 }, heading: { marginTop: 28, fontFamily: fonts.display, fontSize: 19 },

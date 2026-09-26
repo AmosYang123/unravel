@@ -138,12 +138,22 @@ const deezerSearch = (budget: Budget, query: string, limit: number) =>
 // `artist:"name"` search is unreliable -- for Olivia Rodrigo it returns one
 // track, so every entry got the same song. Resolve the artist, then read their
 // top tracks, which gives up to 50 real songs to choose from.
-async function tracksForArtist(budget: Budget, name: string): Promise<DeezerTrack[]> {
-  const found = (await deezerGet(
-    budget,
-    `/search/artist?limit=1&q=${encodeURIComponent(name)}`,
-  )) as unknown as { id?: number }[];
-  const id = found[0]?.id;
+// Deezer's first artist hit is not always the famous one: for "Bush" it is a
+// 16-fan namesake. Without a saved choice, take the most-followed exact match.
+const foldName = (s: string) => s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+
+async function tracksForArtist(budget: Budget, name: string, chosenId?: number): Promise<DeezerTrack[]> {
+  let id = chosenId;
+  if (!id) {
+    const found = (await deezerGet(
+      budget,
+      `/search/artist?limit=10&q=${encodeURIComponent(name)}`,
+    )) as unknown as { id?: number; name?: string; nb_fan?: number }[];
+    const exact = found
+      .filter((a) => typeof a?.name === "string" && foldName(a.name) === foldName(name))
+      .sort((a, b) => (b.nb_fan ?? 0) - (a.nb_fan ?? 0));
+    id = (exact[0] ?? found[0])?.id;
+  }
   if (id) {
     const top = await deezerGet(budget, `/artist/${id}/top?limit=50`);
     if (top.length) return top;
@@ -307,6 +317,8 @@ const bodySchema = z.object({
   seed: z.unknown().optional(),
   count: z.unknown().optional(),
   artists: stringList,
+  /** The Deezer artist each listed name means, when the person picked one. */
+  artistIds: z.record(z.unknown()).optional(),
   genres: stringList,
   themeGenres: stringList,
   feelings: stringList,
@@ -367,6 +379,10 @@ Deno.serve(async (req) => {
             .slice(0, max)
         : [];
     const artists = toList(body.artists, 8);
+    const chosenId = (name: string) => {
+      const id = Number(body.artistIds?.[name]);
+      return Number.isInteger(id) && id > 0 ? id : undefined;
+    };
     const genres = toList(body.genres, 8);
     const themeGenres = toList(body.themeGenres, 4);
     const feelings = toList(body.feelings, 6);
@@ -424,7 +440,7 @@ Deno.serve(async (req) => {
     const leadArtists = rotate(artists, seed).slice(0, 4);
     const artistResults = await mapLimit(leadArtists, async (name) => ({
       name,
-      tracks: await tracksForArtist(budget, name),
+      tracks: await tracksForArtist(budget, name, chosenId(name)),
     }));
 
     for (const { name, tracks } of artistResults) {

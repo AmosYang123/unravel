@@ -186,6 +186,7 @@ export type Database = {
           interests: string[] | null
           last_reminder_sent_at: string | null
           lock_enabled: boolean
+          music_artist_ids: Json
           music_artists: string[]
           music_tastes: string[]
           name: string
@@ -215,6 +216,7 @@ export type Database = {
           interests?: string[] | null
           last_reminder_sent_at?: string | null
           lock_enabled?: boolean
+          music_artist_ids?: Json
           music_artists?: string[]
           music_tastes?: string[]
           name?: string
@@ -244,6 +246,7 @@ export type Database = {
           interests?: string[] | null
           last_reminder_sent_at?: string | null
           lock_enabled?: boolean
+          music_artist_ids?: Json
           music_artists?: string[]
           music_tastes?: string[]
           name?: string

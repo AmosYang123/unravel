@@ -99,6 +99,8 @@ export interface Settings {
   passcode: string;
   musicTastes: string[];
   musicArtists: string[];
+  /** Which Deezer artist a saved name means, when two share it. Keyed by name. */
+  musicArtistIds: Record<string, number>;
   showMoodInHistory: boolean;
   /** Empty means they didn't say — nothing here is required. */
   yearLevel: YearLevel | "";

@@ -87,7 +87,7 @@ Provide a working, email-confirmed demo account in the private App Review Inform
 1. Sign in, complete or skip onboarding. Explain that optional questions personalize the journal.
 2. Create text, short, bullet, prompt, gratitude and mood entries. Record a voice memo only after tapping Record. Save, reopen, play, edit/add a note, bookmark, search History and inspect Insights.
 3. In Settings → Privacy & data, enable AI suggestions, read the named-provider disclosure and choose Allow sharing. Save an entry for a reflection/song suggestion. Save a voice entry to exercise automatic transcription for its AI reflection; the entry also offers manual transcription when needed. Inspect Reading and Music. Turn sharing off and verify basic journaling still works. There is no payment gate.
-4. Set reminder schedule, enable device notifications and send a test. Separately enable/test reminder email. Deny OS permissions in a fresh install and verify text entries and breathing still work.
+4. Set reminder schedule, enable device notifications and reminder email, and wait for one of each to arrive. Deny OS permissions in a fresh install and verify text entries and breathing still work.
 5. Export a journal, use/recover recently deleted entries, permanently delete an entry. Enable/change/disable passcode lock; background and reopen the app.
 6. Settings → Account → Delete account, confirm, then verify the disposable account cannot sign in and its data/recordings are removed. Verify failed cleanup is reported rather than presented as success.
 7. Open Privacy policy before sign-in and from Settings; verify public HTTPS policy/support URLs without a login. Test password reset, email confirmation, sign-out/account switching and offline errors.

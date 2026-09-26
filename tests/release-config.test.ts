@@ -1,3 +1,4 @@
+import shippedAppJson from "../mobile/app.json";
 import shippedEasJson from "../mobile/eas.json";
 import { expect, it } from "vitest";
 import { isAppLinkUrl, isPublicHttpsUrl, validateEasConfig, validateReleaseConfig, validateReleaseEnvironment } from "../mobile/lib/release-config";
@@ -84,4 +85,11 @@ it("passes eas.json profiles whose auth-email URLs use the app scheme", () => {
 
 it("ships an eas.json every release profile can actually build from", () => {
   expect(validateEasConfig(shippedEasJson)).toEqual([]);
+});
+
+// iPhone-only means no iPad screenshots or iPad review pass. The app uses only
+// HTTPS and hashing (passcode PBKDF2/SHA-256), which are exempt from export rules.
+it("ships an iPhone-only build that declares no non-exempt encryption", () => {
+  expect(shippedAppJson.expo.ios.supportsTablet).toBe(false);
+  expect(shippedAppJson.expo.ios.config.usesNonExemptEncryption).toBe(false);
 });

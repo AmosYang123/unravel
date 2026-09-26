@@ -8,7 +8,7 @@ const requirements = {
   providers: "Identify authentication SMTP and verify every provider's production retention/training settings; finalize the privacy policy.",
   privacyLabels: "Review actual production data flows and complete App Privacy answers.",
   contentRights: "Record distribution rights/terms for music previews, artwork, articles, images and fonts.",
-  signedDevices: "Test the signed release on supported physical iPhone/iPad devices; record build, devices, OS versions and outcomes.",
+  signedDevices: "Test the signed release on supported physical iPhones; record build, devices, OS versions and outcomes.",
   archive: "Inspect signing, SDK version, entitlements and aggregated privacy manifests in the production archive.",
   review: "Prepare App Store listing, age rating, screenshots and a tested review account; store credentials privately, never here.",
 };

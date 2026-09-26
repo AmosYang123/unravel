@@ -3,7 +3,11 @@ export const AI_SHARING_NOTICE = "Allow Unravel to send journal text, moods, fee
 /** What AI suggestions are, in the user's terms. */
 export const AI_SUGGESTIONS_SUMMARY = "Gentle reflections on your entries, plus reading and music picks for your mood.";
 /** Shown where someone turns them on. The privacy policy names each service. */
-export const AI_SUGGESTIONS_CONSENT = "To make these, your entries, moods and recordings are sent to our AI partners. Turn it off any time in Settings. Journaling works either way.";
+export const AI_SUGGESTIONS_CONSENT = "To make these, your entries, moods and recordings are sent to outside AI, search and music services. Turn it off any time in Settings. Journaling works either way.";
+
+/** Always reachable from Settings: Unravel is not an emergency service. */
+export const CRISIS_HELP = "In danger or thinking about hurting yourself? Call your local emergency number. In the US, call or text 988.";
+export const CRISIS_HELP_URL = "https://findahelpline.com";
 
 export const PRIVACY_SECTIONS = [
   { title: "Who can use Unravel", text: "Unravel is for people aged 13 and over. Creating an account or starting a guest journal asks for your date of birth to confirm this. The date is checked at that moment and is not stored, and it is not asked for again when you sign back in. If we learn that an account belongs to someone under 13, we delete the account and its journal. Contact support to report one." },

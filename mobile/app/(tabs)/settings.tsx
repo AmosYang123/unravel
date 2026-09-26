@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { AI_SUGGESTIONS_CONSENT, AI_SUGGESTIONS_SUMMARY } from "@/lib/privacy";
+import { AI_SUGGESTIONS_CONSENT, AI_SUGGESTIONS_SUMMARY, CRISIS_HELP, CRISIS_HELP_URL } from "@/lib/privacy";
 import { releaseConfig } from "@/lib/release-config";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -1145,6 +1145,14 @@ export default function SettingsScreen() {
           <PageUnderline style={styles.underline} />
         </View>
 
+        <View style={[styles.help, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={[styles.rowTitle, { color: theme.colors.foreground }]}>Need to talk to someone now?</Text>
+          <Text style={[styles.rowDescription, { color: theme.colors.mutedForeground }]}>{CRISIS_HELP}</Text>
+          <Pressable onPress={() => void Linking.openURL(CRISIS_HELP_URL)} accessibilityRole="link" hitSlop={8}>
+            <Text style={[styles.helpLink, { color: theme.colors.foreground }]}>Find a free helpline near you</Text>
+          </Pressable>
+        </View>
+
         {/* A scannable list: each line shows where the setting stands, and opens the rest in a dialog. */}
         <View style={styles.section}>
           <AppearanceSection />
@@ -1194,6 +1202,8 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   listContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 48 },
   underline: { marginTop: 12 },
   section: { marginTop: 32 },
+  help: { marginTop: 24, padding: 16, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
+  helpLink: { marginTop: 10, fontFamily: fonts.bodySemiBold, fontSize: 14, textDecorationLine: "underline" },
   themeGrid: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   themeCard: { width: "31%", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 12 },
   swatchRow: { flexDirection: "row", gap: 6 },

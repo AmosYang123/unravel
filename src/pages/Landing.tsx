@@ -22,7 +22,6 @@ export default function Landing() {
           <h1>You don’t have to<br />hold it <em>all.</em></h1>
           <p className="hero-description">A quiet place to put your thoughts, check in with yourself, and take the day one breath at a time.</p>
           <a className="site-button" href="#a-little-space">Meet Unravel <ArrowUpRight size={18} aria-hidden="true" /></a>
-          <p className="site-note">A journaling app, in preparation for launch.</p>
         </div>
         <div className="journal-preview" aria-label="Illustrative journal entry with fictional content">
           <div className="preview-label">A MOMENT, JUST FOR YOU <span>↗</span></div>

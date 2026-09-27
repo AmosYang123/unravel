@@ -62,7 +62,7 @@ export default function TimelineScreen() {
   // Filters live in local search params so a filtered Timeline can be linked to
   // from Patterns, mirroring the web app's URL-params approach.
   const params = useLocalSearchParams<{ mode?: string; feeling?: string; kept?: string; on?: string }>();
-  const { entryCount, loading } = useEntries();
+  const { entries: journal, entryCount, loading } = useEntries();
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -147,7 +147,9 @@ export default function TimelineScreen() {
         if (requestId !== requestIdRef.current) return;
         setQueryState({ entries: [], hasMore: false, status: "error", loadingMore: false });
       });
-  }, [filters, reloadKey]);
+    // The tab stays mounted, so re-query whenever the journal itself changes
+    // (a new check-in, an edit, a delete); otherwise the list goes stale.
+  }, [filters, reloadKey, journal]);
 
   const loadMore = useCallback(() => {
     if (queryState.status !== "ready" || !queryState.hasMore || queryState.loadingMore) return;

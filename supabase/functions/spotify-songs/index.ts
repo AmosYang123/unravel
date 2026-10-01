@@ -3,33 +3,27 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@3";
 
 /**
- * Live song recommendations from the Deezer public API.
+ * Live song recommendations from Apple's iTunes Search API.
  *
- * Third rewrite, and the first one that isn't Spotify. Spotify's Feb 2026
- * rules require the app to be owned by a Premium account before any of the
- * catalog endpoints answer, which this project does not have, so every
- * request was falling through to the 36-song offline catalogue in
- * src/lib/content.ts. An artist a real user actually listed was almost never
- * in that list, so picks degraded to generic mood scoring and felt random.
- *
- * Deezer's public API needs no auth, no app registration, and no token flow,
- * and still returns working 30s preview URLs (which Spotify largely stopped
- * doing). Candidates come from:
- *   - /artist/<id>/top for each artist the user listed  (the main source)
- *   - genre playlists or search to fill remaining slots
+ * Fourth provider. Spotify's Feb 2026 rules shut its catalog to apps not
+ * owned by a Premium account, and Deezer's public API left a content-rights
+ * question for App Review. iTunes Search needs no key, returns working 30s
+ * previews, and exists to promote Apple's own catalogue, so each pick links
+ * to Apple Music. Candidates come from:
+ *   - /lookup?id=<artist>&entity=song for each artist the user listed (the
+ *     main source; Apple returns their most popular songs first)
+ *   - plain song search on the genre name to fill remaining slots
  * Songs this person was already given are skipped, and Groq picks the ones
  * that fit this entry's mood and feelings from those real candidates.
- * Deezer's search has no real genre facet -- genre: behaves as free text --
- * and track results carry no genre or release date, so `genre` is the label
- * that drove the query and `releasedAt` is omitted rather than guessed.
+ * `genre` is the label that drove the query, not Apple's genre for the song.
  * Mood/energy shaping is done here, from the entry, as it always was.
  *
  * The function name and its request/response contract are unchanged;
  * src/lib/music.ts still calls it as `spotify-songs` and reads
- * `source: "deezer"`.
+ * `source: "itunes"`.
  */
 
-// Slug is historical: this function talks to Deezer, not Spotify. Renaming
+// Slug is historical: this function talks to iTunes, not Spotify. Renaming
 // it means redeploying under a new slug and updating the invoke call, which
 // isn't worth it for a name.
 
@@ -45,21 +39,23 @@ type Pick = {
   releasedAt?: string | null;
 };
 
-type DeezerTrack = {
-  id: number;
-  title?: string;
-  link?: string;
-  duration?: number;
-  rank?: number;
-  preview?: string | null;
-  artist?: { name?: string };
-  album?: { title?: string; cover_medium?: string | null; cover_big?: string | null };
+/** One row of an iTunes Search or Lookup reply: an artist or a song. */
+type ItunesItem = {
+  wrapperType?: string;
+  kind?: string;
+  artistId?: number;
+  artistName?: string;
+  trackId?: number;
+  trackName?: string;
+  trackViewUrl?: string;
+  previewUrl?: string;
+  artworkUrl100?: string;
+  releaseDate?: string;
 };
 
-type DeezerResponse = {
-  data?: unknown[];
-  error?: { code?: number; message?: string; type?: string };
-};
+type ItunesResponse = { results?: unknown[] };
+
+const isSong = (item: ItunesItem) => item?.wrapperType === "track" && item.kind === "song";
 
 const MOOD_LABELS = ["heavy", "low", "even", "light", "bright"];
 
@@ -67,14 +63,16 @@ const MOOD_LABELS = ["heavy", "low", "even", "light", "bright"];
 const CALM = ["ambient", "classical", "lo-fi", "bedroom pop", "jazz"];
 const LIFT = ["hyperpop", "rap", "pop", "afrobeats", "rock"];
 
-// Deezer is unauthenticated and rate limited around 50 requests / 5s across
-// all callers of this IP, so each invocation stays well under that.
-const MAX_REQUESTS = 16;
+// iTunes Search is unauthenticated and limited to roughly 20 requests a minute
+// per IP, shared by every caller behind this egress, so each invocation makes
+// only a few.
+// ponytail: no response cache; add one keyed by URL if Apple starts refusing.
+const MAX_REQUESTS = 8;
 const REQUEST_TIMEOUT_MS = 4000;
-const CONCURRENCY = 4;
+const CONCURRENCY = 2;
 
 // Every URL below is third-party data: `url` reaches an <a href> on the web
-// and Linking.openURL on mobile, so a `javascript:` link Deezer handed back
+// and Linking.openURL on mobile, so a `javascript:` link the API handed back
 // would run in the signed-in user's session. article-recs already pins its
 // results to https; hold this function to the same rule instead of trusting
 // whatever the API returns.
@@ -87,8 +85,8 @@ const httpsUrl = (value: unknown): string | null => {
   }
 };
 
-const RATE_LIMITED = "Deezer is rate limiting right now — try again shortly.";
-const UPSTREAM_FAILED = "Deezer didn't return anything for those preferences.";
+const RATE_LIMITED = "Apple Music is busy right now — try again shortly.";
+const UPSTREAM_FAILED = "Apple Music didn't return anything for those preferences.";
 
 class Budget {
   private used = 0;
@@ -99,66 +97,61 @@ class Budget {
   }
 }
 
-async function deezerGet(budget: Budget, path: string): Promise<DeezerTrack[]> {
+async function itunesGet(budget: Budget, path: string): Promise<ItunesItem[]> {
   if (!budget.take()) return [];
 
   let res: Response;
   try {
-    res = await fetch(`https://api.deezer.com${path}`, {
+    res = await fetch(`https://itunes.apple.com${path}`, {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
-    console.error("Deezer request failed:", err);
+    console.error("iTunes request failed:", err);
     return [];
   }
 
-  if (res.status === 429) {
+  // Apple answers an over-limit caller with 403 as often as 429.
+  if (res.status === 429 || res.status === 403) {
     throw Object.assign(new Error(RATE_LIMITED), { status: 429 });
   }
   if (!res.ok) {
-    console.error(`Deezer request failed [${res.status}]`);
+    console.error(`iTunes request failed [${res.status}]`);
     return [];
   }
 
-  const body = (await res.json().catch(() => null)) as DeezerResponse | null;
-  // Deezer reports quota exhaustion as a 200 with an error envelope.
-  if (body?.error?.code === 4 || body?.error?.type === "Quota") {
-    throw Object.assign(new Error(RATE_LIMITED), { status: 429 });
-  }
-  if (body?.error) {
-    console.error("Deezer returned an error");
-    return [];
-  }
-  return Array.isArray(body?.data) ? (body!.data! as DeezerTrack[]) : [];
+  const body = (await res.json().catch(() => null)) as ItunesResponse | null;
+  return Array.isArray(body?.results) ? (body!.results! as ItunesItem[]) : [];
 }
 
-const deezerSearch = (budget: Budget, query: string, limit: number) =>
-  deezerGet(budget, `/search?limit=${limit}&q=${encodeURIComponent(query)}`);
+const songSearch = async (budget: Budget, term: string, limit: number) =>
+  (await itunesGet(budget, `/search?media=music&entity=song&limit=${limit}&term=${encodeURIComponent(term)}`)).filter(isSong);
 
-// `artist:"name"` search is unreliable -- for Olivia Rodrigo it returns one
-// track, so every entry got the same song. Resolve the artist, then read their
-// top tracks, which gives up to 50 real songs to choose from.
-// Deezer's first artist hit is not always the famous one: for "Bush" it is a
-// 16-fan namesake. Without a saved choice, take the most-followed exact match.
+const songsBy = async (budget: Budget, artistId: number) =>
+  (await itunesGet(budget, `/lookup?id=${artistId}&entity=song&limit=50`)).filter(isSong);
+
+// Search for the artist, then read their songs: song search on the name alone
+// mixes in covers and namesakes. Apple orders artist results by relevance, so
+// the first exact name match is the well-known one.
 const foldName = (s: string) => s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
 
-async function tracksForArtist(budget: Budget, name: string, chosenId?: number): Promise<DeezerTrack[]> {
-  let id = chosenId;
-  if (!id) {
-    const found = (await deezerGet(
-      budget,
-      `/search/artist?limit=10&q=${encodeURIComponent(name)}`,
-    )) as unknown as { id?: number; name?: string; nb_fan?: number }[];
-    const exact = found
-      .filter((a) => typeof a?.name === "string" && foldName(a.name) === foldName(name))
-      .sort((a, b) => (b.nb_fan ?? 0) - (a.nb_fan ?? 0));
-    id = (exact[0] ?? found[0])?.id;
+async function tracksForArtist(budget: Budget, name: string, chosenId?: number): Promise<ItunesItem[]> {
+  const wanted = foldName(name);
+  // Ids saved before the move to iTunes are Deezer ids and mean nothing (or
+  // someone else) here, so a saved id only counts when its songs match.
+  if (chosenId) {
+    const songs = await songsBy(budget, chosenId);
+    if (songs.some((t) => foldName(t.artistName ?? "") === wanted)) return songs;
   }
+  const found = (await itunesGet(
+    budget,
+    `/search?media=music&entity=musicArtist&limit=10&term=${encodeURIComponent(name)}`,
+  )).filter((a) => a?.wrapperType === "artist" && a.artistId);
+  const id = (found.find((a) => foldName(a.artistName ?? "") === wanted) ?? found[0])?.artistId;
   if (id) {
-    const top = await deezerGet(budget, `/artist/${id}/top?limit=50`);
-    if (top.length) return top;
+    const songs = await songsBy(budget, id);
+    if (songs.length) return songs;
   }
-  return deezerSearch(budget, `artist:"${name}"`, 10);
+  return songSearch(budget, name, 10);
 }
 
 /** Song ids this person was already given, so a new entry gets new songs. */
@@ -185,7 +178,7 @@ async function recentlyServed(
 const GROQ_MODEL = "openai/gpt-oss-20b";
 
 /**
- * Picks the songs that fit this entry's mood and feelings out of real Deezer
+ * Picks the songs that fit this entry's mood and feelings out of real iTunes
  * candidates. The model only returns indexes into the list, so it can't invent
  * a song. Only the entry's mood, energy and feeling tags go to Groq -- never
  * its text. Null on any failure; the caller falls back to plain ranking.
@@ -248,28 +241,12 @@ async function chooseForEntry(
   }
 }
 
-// Deezer's search has no genre facet -- `genre:"lo-fi"` is treated as free
-// text and returns whatever is popular, which is how picks ended up feeling
-// random. Editor/user playlists named after the genre are the closest thing
-// the public API has to a genre feed, so resolve one and read its tracks.
-async function tracksForGenre(
-  budget: Budget,
-  genre: string,
-  pickNth: number,
-  limit: number,
-): Promise<DeezerTrack[]> {
-  const lists = (await deezerGet(
-    budget,
-    `/search/playlist?limit=3&q=${encodeURIComponent(genre)}`,
-  )) as unknown as { id?: number; nb_tracks?: number }[];
-  const usable = lists.filter((l) => l?.id && (l.nb_tracks ?? 0) >= limit);
-  const chosen = usable.length ? usable[pickNth % usable.length] : null;
-  if (chosen) {
-    const tracks = await deezerGet(budget, `/playlist/${chosen.id}/tracks?limit=${limit}`);
-    if (tracks.length) return tracks;
-  }
-  // No playlist matched: fall back to plain track search on the genre name.
-  return deezerSearch(budget, genre, limit);
+// iTunes has no genre feed or playlists in its public search, so a genre is a
+// plain song search on its name. Results are rough ("lo-fi" finds songs
+// titled Lo-Fi); Groq's pick against the entry's mood does the rest.
+// ponytail: free-text genre search; MusicKit charts by genre if picks feel off.
+function tracksForGenre(budget: Budget, genre: string, limit: number): Promise<ItunesItem[]> {
+  return songSearch(budget, genre, limit);
 }
 
 // Run a handful of searches at once instead of serially, but never more than
@@ -300,10 +277,9 @@ const corsFor = (req: Request) => {
 };
 
 // Counted in Postgres: edge instances are ephemeral, so in-memory counters reset.
-// Deezer's ~50 requests / 5s ceiling is shared by every user behind this egress
-// IP, so one account is held to the same 20/hr the other provider-touching
-// functions use: at MAX_REQUESTS each that is 240 Deezer calls an hour, well
-// under the shared budget, while still covering a long session of writing.
+// iTunes' ~20 requests a minute is shared by every user behind this egress IP,
+// so one account is held to the same 20/hr the other provider-touching
+// functions use, while still covering a long session of writing.
 const RATE_LIMIT = 20;
 const RATE_WINDOW_SECONDS = 3600;
 
@@ -317,7 +293,7 @@ const bodySchema = z.object({
   seed: z.unknown().optional(),
   count: z.unknown().optional(),
   artists: stringList,
-  /** The Deezer artist each listed name means, when the person picked one. */
+  /** The iTunes artist each listed name means, when the person picked one. */
   artistIds: z.record(z.unknown()).optional(),
   genres: stringList,
   themeGenres: stringList,
@@ -405,39 +381,37 @@ Deno.serve(async (req) => {
     const seen = new Set<string>();
 
     const push = (
-      track: DeezerTrack,
+      track: ItunesItem,
       genre: string,
       reason: string,
       bonus: number,
       src: "artist" | "genre" = "artist",
     ) => {
-      const id = track?.id ? String(track.id) : "";
-      if (!id || !track.title || seen.has(id)) return;
+      const id = track?.trackId ? String(track.trackId) : "";
+      if (!id || !track.trackName || seen.has(id)) return;
       seen.add(id);
       const bucketFit =
         calmLeaning && CALM.includes(genre) ? 3 : liftLeaning && LIFT.includes(genre) ? 3 : 1;
-      // Deezer's `rank` is a popularity score in the low millions at the top
-      // end; scale it to roughly 0-1 so it only breaks ties.
-      const popularity = Math.min(1, Math.max(0, (track.rank ?? 0) / 1_000_000));
       candidates.push({
         id,
-        title: track.title,
-        artist: track.artist?.name ?? "Unknown",
+        title: track.trackName,
+        artist: track.artistName ?? "Unknown",
         genre,
         reason,
-        url: httpsUrl(track.link) ?? `https://www.deezer.com/track/${id}`,
-        previewUrl: httpsUrl(track.preview),
-        albumArt: httpsUrl(track.album?.cover_medium) ?? httpsUrl(track.album?.cover_big),
-        // Deezer's track search carries no release date. Left off entirely
-        // rather than defaulted, so nothing downstream renders a fake one.
+        url: httpsUrl(track.trackViewUrl) ?? `https://music.apple.com/us/song/${id}`,
+        previewUrl: httpsUrl(track.previewUrl),
+        // Apple serves any size from the same path; 100px is too soft for the card.
+        albumArt: httpsUrl(track.artworkUrl100?.replace("100x100bb", "300x300bb")),
+        releasedAt: typeof track.releaseDate === "string" ? track.releaseDate : null,
         src,
-        score: bonus + bucketFit + popularity,
+        score: bonus + bucketFit,
       });
     };
 
     // 1) Artists the user listed. This is the point of the whole function: if
     // they named someone, that someone should actually show up.
-    const leadArtists = rotate(artists, seed).slice(0, 4);
+    // Two requests per artist; three artists leave room for the genre fill.
+    const leadArtists = rotate(artists, seed).slice(0, 3);
     const artistResults = await mapLimit(leadArtists, async (name) => ({
       name,
       tracks: await tracksForArtist(budget, name, chosenId(name)),
@@ -445,10 +419,10 @@ Deno.serve(async (req) => {
 
     for (const { name, tracks } of artistResults) {
       const wanted = name.toLowerCase();
-      // Deezer falls back to fuzzy matching, so keep only the artist asked for.
-      const exact = tracks.filter((t) => (t.artist?.name ?? "").toLowerCase() === wanted);
+      // Song search falls back to fuzzy matching, so keep only the artist asked for.
+      const exact = tracks.filter((t) => (t.artistName ?? "").toLowerCase() === wanted);
       const usable = exact.length ? exact : tracks;
-      const label = usable[0]?.artist?.name ?? name;
+      const label = usable[0]?.artistName ?? name;
       // Nothing in a track search says what genre this is, and the user's
       // liked genre didn't drive this query, so don't claim one.
       for (const track of usable) {
@@ -464,7 +438,7 @@ Deno.serve(async (req) => {
     const genrePool = (preferredGenres.length ? preferredGenres : rotate(bucket, seed)).slice(0, artists.length ? 2 : 3);
     const genreResults = await mapLimit(genrePool, async (genre) => ({
       genre,
-      tracks: await tracksForGenre(budget, genre, seed, 8),
+      tracks: await tracksForGenre(budget, genre, 8),
     }));
 
     for (const { genre, tracks } of genreResults) {
@@ -537,7 +511,7 @@ Deno.serve(async (req) => {
         const { score: _score, src: _src, ...pick } = c;
         picks.push(pick);
       }
-      return json({ picks, basis, source: "deezer" });
+      return json({ picks, basis, source: "itunes" });
     }
 
     // Best matches first, then rotate within each source using the seed so two
@@ -591,7 +565,7 @@ Deno.serve(async (req) => {
       take(ranked[(seed + i) % ranked.length], false);
     }
 
-    return json({ picks, basis, source: "deezer" });
+    return json({ picks, basis, source: "itunes" });
   } catch (err) {
     const status = (err as { status?: number }).status ?? 500;
     console.error("spotify-songs error:", err);

@@ -81,7 +81,7 @@ const ProfileSection = () => {
       const outcomes = keepOutcomesFor(
         terms,
         added,
-        // Deezer decides; the model only gets a look when Deezer finds nothing,
+        // iTunes decides; the model only gets a look when iTunes finds nothing,
         // and only if they have suggestions turned on.
         await resolveTags("artist", raw, settings.aiSuggestionsEnabled),
       );

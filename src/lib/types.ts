@@ -29,7 +29,7 @@ export type SongSuggestion = {
 export type SongSuggestions = {
   picks: SongSuggestion[];
   basis: string;
-  source: "deezer" | "offline";
+  source: "itunes" | "deezer" | "offline";
 };
 
 /** One "add something" note. The entry's original text is never rewritten. */

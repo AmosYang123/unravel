@@ -8,11 +8,11 @@ import { z } from "npm:zod@3";
  *
  * Order matters, because one of these two has a ground truth and the other
  * doesn't:
- *   - An ARTIST is checked against Deezer first, the same catalogue that later
- *     picks their songs in spotify-songs. If Deezer knows the name, its own
+ *   - An ARTIST is checked against iTunes first, the same catalogue that later
+ *     picks their songs in spotify-songs. If iTunes knows the name, its own
  *     spelling wins and the model is never called — no cost, no latency, no
- *     guessing. Only when Deezer finds nothing does the model suggest what
- *     they probably meant, and that suggestion is then looked up on Deezer
+ *     guessing. Only when iTunes finds nothing does the model suggest what
+ *     they probably meant, and that suggestion is then looked up on iTunes
  *     too, so the model cannot invent an artist that does not exist.
  *   - An INTEREST has no catalogue to check against, so the model only fixes
  *     spelling and capitalisation. It is told to keep their word and their
@@ -20,7 +20,7 @@ import { z } from "npm:zod@3";
  *
  * The caller decides what to do with the answer; nothing here is applied
  * silently. `source` says where the value came from so the app can apply a
- * Deezer correction outright but ask before taking a model's guess.
+ * catalogue correction outright but ask before taking a model's guess.
  *
  * Privacy: the request is a handful of short words and nothing else — no entry
  * text, no name, no ids. None of it is logged.
@@ -80,10 +80,7 @@ const GENERIC_ERROR = "Something went wrong. Try again in a moment.";
 
 const MAX_TERMS = 6;
 const MAX_LENGTH = 60;
-const DEEZER_TIMEOUT_MS = 4000;
-// A fuzzy Deezer hit has to be a real artist, not a soundalike upload, before
-// it is allowed to overwrite what someone typed.
-const FUZZY_MIN_FANS = 1000;
+const ITUNES_TIMEOUT_MS = 4000;
 
 const bodySchema = z.object({
   kind: z.enum(["artist", "interest"]),
@@ -125,26 +122,26 @@ const closeEnough = (a: string, b: string): boolean => {
   return d <= Math.min(3, Math.max(1, Math.floor(Math.min(a.length, b.length) / 6)));
 };
 
-type DeezerArtist = { name: string; nb_fan?: number };
+type ItunesArtist = { artistName: string };
 
-const isDeezerArtist = (value: unknown): value is DeezerArtist => {
+const isItunesArtist = (value: unknown): value is ItunesArtist => {
   if (typeof value !== "object" || value === null) return false;
-  const name = (value as { name?: unknown }).name;
+  const name = (value as { artistName?: unknown }).artistName;
   return typeof name === "string" && name.trim().length > 0;
 };
 
 /**
- * Deezer's own spelling of an artist, or null if it doesn't know them.
- * Deezer's search always answers with something, so a result is only accepted
+ * iTunes' own spelling of an artist, or null if it doesn't know them.
+ * iTunes' search always answers with something, so a result is only accepted
  * when the name it returns is the name that was asked for, give or take a
  * typo's worth of letters.
  */
-async function deezerArtist(term: string): Promise<string | null> {
+async function catalogArtist(term: string): Promise<string | null> {
   let res: Response;
   try {
     res = await fetch(
-      `https://api.deezer.com/search/artist?limit=5&q=${encodeURIComponent(term)}`,
-      { signal: AbortSignal.timeout(DEEZER_TIMEOUT_MS) },
+      `https://itunes.apple.com/search?media=music&entity=musicArtist&limit=5&term=${encodeURIComponent(term)}`,
+      { signal: AbortSignal.timeout(ITUNES_TIMEOUT_MS) },
     );
   } catch {
     // Deliberately not logged: the query is the user's own words.
@@ -152,20 +149,20 @@ async function deezerArtist(term: string): Promise<string | null> {
   }
   if (!res.ok) return null;
 
-  const body = (await res.json().catch(() => null)) as { data?: unknown; error?: unknown } | null;
-  if (!body || body.error || !Array.isArray(body.data)) return null;
+  const body = (await res.json().catch(() => null)) as { results?: unknown } | null;
+  if (!body || !Array.isArray(body.results)) return null;
 
-  const artists = body.data.filter(isDeezerArtist);
+  const artists = body.results.filter(isItunesArtist);
   const wanted = fold(term);
   if (!wanted) return null;
 
-  const exact = artists.find((a) => fold(a.name) === wanted);
-  if (exact) return exact.name;
+  const exact = artists.find((a) => fold(a.artistName) === wanted);
+  if (exact) return exact.artistName;
 
-  const near = artists.find(
-    (a) => (a.nb_fan ?? 0) >= FUZZY_MIN_FANS && closeEnough(fold(a.name), wanted),
-  );
-  return near?.name ?? null;
+  // iTunes has no follower counts to tell a real artist from a soundalike
+  // upload, but it ranks by relevance: only its top hit may stand in for a typo.
+  const top = artists[0];
+  return top && closeEnough(fold(top.artistName), wanted) ? top.artistName : null;
 }
 
 /** What the model thinks each of these was meant to be. Empty on any failure. */
@@ -304,25 +301,25 @@ Deno.serve(async (req) => {
 
     // 1) The whole line first, so a name with a comma in it stays one artist.
     if (whole && !terms.includes(whole)) {
-      const canonical = await deezerArtist(whole);
+      const canonical = await catalogArtist(whole);
       if (canonical) return json({ results: [settle(whole, canonical, "canonical")] });
     }
 
-    // 2) Each term against Deezer. This is the cheap, authoritative pass and it
+    // 2) Each term against iTunes. This is the cheap, authoritative pass and it
     //    settles almost everything.
     const looked = await Promise.all(
-      terms.map(async (term) => ({ term, canonical: await deezerArtist(term) })),
+      terms.map(async (term) => ({ term, canonical: await catalogArtist(term) })),
     );
 
     const unresolved = looked.filter((l) => !l.canonical).map((l) => l.term);
-    // 3) Only what Deezer could not place goes to the model, and whatever it
-    //    says is looked up on Deezer in turn.
+    // 3) Only what iTunes could not place goes to the model, and whatever it
+    //    says is looked up on iTunes in turn.
     const guesses =
       useModel && unresolved.length ? await askModel(apiKey!, "artist", unresolved) : new Map<string, string>();
     const verified = new Map<string, string>();
     await Promise.all(
       [...guesses].map(async ([term, guess]) => {
-        const canonical = await deezerArtist(guess);
+        const canonical = await catalogArtist(guess);
         if (canonical && fold(canonical) === fold(guess)) verified.set(term, canonical);
       }),
     );

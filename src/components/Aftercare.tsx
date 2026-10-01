@@ -340,9 +340,11 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
                 ))}
               </ul>
               <p className="mt-3 text-xs text-muted-foreground">
-                {shownSongs.source === "deezer"
-                  ? `From Deezer · ${shownSongs.basis}`
-                  : "Live picks couldn't answer just now, so these come from the built-in list."}
+                {shownSongs.source === "itunes"
+                  ? `From Apple Music · ${shownSongs.basis}`
+                  : shownSongs.source === "deezer"
+                    ? `From Deezer · ${shownSongs.basis}`
+                    : "Live picks couldn't answer just now, so these come from the built-in list."}
               </p>
             </>
           )}

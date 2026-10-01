@@ -10,11 +10,11 @@ import { supabase } from "@/integrations/supabase/client";
  *      one press of Add can't leave a chip that reads like a list. Slashes,
  *      commas, semicolons and newlines split; "&" and "and" deliberately do
  *      not, because Simon & Garfunkel is one artist.
- *   2. Artists are checked against Deezer, which is the same catalogue that
+ *   2. Artists are checked against iTunes, which is the same catalogue that
  *      later picks their songs, so a misspelled name doesn't quietly produce
  *      generic picks. Interests have no catalogue, so the model only tidies
  *      spelling and capitalisation.
- *   3. The screen is told what happened and how sure it is. A spelling Deezer
+ *   3. The screen is told what happened and how sure it is. A spelling iTunes
  *      confirms is applied with a one-tap way back to the original; a guess is
  *      asked about rather than applied.
  *
@@ -150,7 +150,7 @@ const readResults = (data: unknown): ServerResult[] => {
 };
 
 /* -- how close two spellings are ---------------------------------------- */
-// The same rule the edge function applies to Deezer's results, repeated here
+// The same rule the edge function applies to iTunes' results, repeated here
 // because that runs on Deno and this runs in the app.
 
 /** Case, accents and punctuation removed, so "Beyoncé!" and "beyonce" compare equal. */
@@ -192,7 +192,7 @@ const outcomeFor = (kind: TagKind, result: ServerResult): TagOutcome => {
   if (result.source === "match" || result.value === original) {
     return { original, value: original, status: "kept" };
   }
-  // Deezer's own spelling, or a guess so close it is plainly the same word:
+  // iTunes' own spelling, or a guess so close it is plainly the same word:
   // apply it and say plainly what it became. Anything further is asked, not
   // assumed.
   if (result.source === "canonical" || closeEnough(fold(original), fold(result.value))) {

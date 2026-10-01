@@ -5,8 +5,8 @@ import type { Entry, Settings, SongSuggestion, SongSuggestions } from "@/lib/typ
 export type { SongSuggestion, SongSuggestions };
 
 /**
- * Live picks from Deezer, shaped by the saved genres/artists and this entry.
- * Falls back to the built-in catalog if Deezer can't answer.
+ * Live picks from iTunes, shaped by the saved genres/artists and this entry.
+ * Falls back to the built-in catalog if iTunes can't answer.
  */
 export async function fetchSongSuggestions(
   entry: Entry,
@@ -46,7 +46,7 @@ export async function fetchSongSuggestions(
       return offline();
     }
 
-    return { picks: data.picks as SongSuggestion[], basis: data.basis as string, source: "deezer" };
+    return { picks: data.picks as SongSuggestion[], basis: data.basis as string, source: "itunes" };
   } catch (err) {
     console.error("spotify-songs failed:", err);
     return offline();

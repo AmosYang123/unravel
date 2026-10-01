@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
@@ -54,7 +54,7 @@ export default function MusicScreen() {
       await update({ musicArtists: applyTagOutcomes(currentSettings().musicArtists, added, outcomes) });
       setNotices(outcomes.filter((outcome) => outcome.status !== "kept"));
       // Two artists with one name: ask which. Only with suggestions on, since
-      // the lookup sends the name to Deezer.
+      // the lookup sends the name to Apple.
       if (settings.aiSuggestionsEnabled) {
         const fresh = currentSettings().musicArtists.filter((name) => !before.includes(name));
         const found = await Promise.all(fresh.map(async (name) => ({ name, choices: await findArtistChoices(name) })));
@@ -101,15 +101,12 @@ export default function MusicScreen() {
             key={choice.id}
             onPress={() => chooseArtist(asking.name, choice.id)}
             accessibilityRole="button"
-            accessibilityLabel={`${choice.name}, ${formatFans(choice.fans)}`}
+            accessibilityLabel={choice.genre ? `${choice.name}, ${choice.genre}` : choice.name}
             style={[styles.choice, { borderColor: theme.colors.border }]}
           >
-            {choice.picture ? <Image source={{ uri: choice.picture }} style={styles.choicePicture} /> : <View style={[styles.choicePicture, { backgroundColor: theme.colors.secondary }]} />}
             <View style={styles.choiceText}>
               <Text style={[styles.choiceName, { color: theme.colors.foreground }]}>{choice.name}</Text>
-              <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
-                {formatFans(choice.fans)} · {choice.albums} {choice.albums === 1 ? "album" : "albums"}
-              </Text>
+              {choice.genre ? <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>{choice.genre}</Text> : null}
             </View>
           </Pressable>
         ))}
@@ -118,12 +115,8 @@ export default function MusicScreen() {
   );
 }
 
-const formatFans = (fans: number) =>
-  fans >= 1_000_000 ? `${(fans / 1_000_000).toFixed(1)}M fans` : fans >= 1_000 ? `${Math.round(fans / 1_000)}K fans` : `${fans} fans`;
-
 const createStyles = (fonts: FontSet) => StyleSheet.create({
   choice: { flexDirection: "row", alignItems: "center", gap: 12, padding: 10, marginTop: 10, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
-  choicePicture: { width: 48, height: 48, borderRadius: 24 },
   choiceText: { flex: 1 },
   choiceName: { fontFamily: fonts.bodySemiBold, fontSize: 15 },
   safe: { flex: 1 }, content: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 48 }, underline: { marginTop: 12 },

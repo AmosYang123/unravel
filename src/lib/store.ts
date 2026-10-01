@@ -114,7 +114,7 @@ const toSongs = (value: unknown): SongSuggestions | undefined => {
   if (!isRecord(value)) return undefined;
   const { picks, basis, source } = value;
   if (!Array.isArray(picks) || typeof basis !== "string") return undefined;
-  if (source !== "deezer" && source !== "offline") return undefined;
+  if (source !== "itunes" && source !== "deezer" && source !== "offline") return undefined;
   return {
     picks: picks.map(toSongPick).filter((pick): pick is SongSuggestion => pick !== null),
     basis,

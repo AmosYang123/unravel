@@ -5,8 +5,8 @@ import type { Entry, Settings, SongSuggestion, SongSuggestions } from "@/lib/typ
 export type { SongSuggestion, SongSuggestions };
 
 /**
- * Live picks from Deezer, shaped by the saved genres/artists and this entry.
- * Falls back to the built-in catalog if Deezer can't answer.
+ * Live picks from iTunes, shaped by the saved genres/artists and this entry.
+ * Falls back to the built-in catalog if iTunes can't answer.
  */
 export async function fetchSongSuggestions(
   entry: Entry,
@@ -47,7 +47,7 @@ export async function fetchSongSuggestions(
       return offline();
     }
 
-    return { picks: data.picks as SongSuggestion[], basis: data.basis as string, source: "deezer" };
+    return { picks: data.picks as SongSuggestion[], basis: data.basis as string, source: "itunes" };
   } catch (err) {
     console.error("spotify-songs failed:", err);
     return offline();
@@ -57,37 +57,37 @@ export async function fetchSongSuggestions(
 export interface ArtistChoice {
   id: number;
   name: string;
-  fans: number;
-  albums: number;
-  picture: string | null;
+  genre: string;
 }
-
-/** Below this many fans a same-name match is an upload or a typo, not a real choice. */
-const MIN_CHOICE_FANS = 100;
 
 const fold = (s: string) => s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
 
 /**
- * Artists on Deezer that go by exactly this name, most followed first. More
- * than one means Unravel should ask which they meant. Only called with AI
- * suggestions on: the lookup sends the name to Deezer.
+ * Artists on iTunes that go by exactly this name, best known first (Apple
+ * ranks by relevance). More than one means Unravel should ask which they
+ * meant. iTunes has no follower counts or artist photos, so genre is what
+ * tells them apart, and two same-name artists in one genre count as one
+ * choice: the person couldn't tell them apart either. Only called with AI
+ * suggestions on: the lookup sends the name to Apple.
  */
 export async function findArtistChoices(name: string): Promise<ArtistChoice[]> {
   try {
-    const res = await fetch(`https://api.deezer.com/search/artist?limit=10&q=${encodeURIComponent(name)}`);
+    const res = await fetch(`https://itunes.apple.com/search?media=music&entity=musicArtist&limit=10&term=${encodeURIComponent(name)}`);
     if (!res.ok) return [];
-    const body = (await res.json()) as { data?: unknown };
+    const body = (await res.json()) as { results?: unknown };
     const wanted = fold(name);
-    return (Array.isArray(body.data) ? body.data : [])
-      .map((a: { id?: unknown; name?: unknown; nb_fan?: unknown; nb_album?: unknown; picture_medium?: unknown }) => ({
-        id: Number(a.id),
-        name: typeof a.name === "string" ? a.name : "",
-        fans: Number(a.nb_fan) || 0,
-        albums: Number(a.nb_album) || 0,
-        picture: typeof a.picture_medium === "string" && a.picture_medium.startsWith("https://") ? a.picture_medium : null,
-      }))
-      .filter((a) => Number.isInteger(a.id) && a.id > 0 && fold(a.name) === wanted && a.fans >= MIN_CHOICE_FANS)
-      .sort((a, b) => b.fans - a.fans);
+    const choices: ArtistChoice[] = [];
+    for (const a of (Array.isArray(body.results) ? body.results : []) as { artistId?: unknown; artistName?: unknown; primaryGenreName?: unknown }[]) {
+      const choice = {
+        id: Number(a.artistId),
+        name: typeof a.artistName === "string" ? a.artistName : "",
+        genre: typeof a.primaryGenreName === "string" ? a.primaryGenreName : "",
+      };
+      if (!Number.isInteger(choice.id) || choice.id <= 0 || fold(choice.name) !== wanted) continue;
+      if (choices.some((c) => c.genre === choice.genre)) continue;
+      choices.push(choice);
+    }
+    return choices;
   } catch {
     return [];
   }

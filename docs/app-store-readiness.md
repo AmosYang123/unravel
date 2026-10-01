@@ -18,7 +18,8 @@ Website verification: 92 tests passed, web/mobile TypeScript passed, production 
 - [x] Deploy website and verify `/`, `/privacy`, `/support`, and a bundled license over public HTTPS (HTTP 200 on September 12, 2026).
 - [x] Remove Gemini from app code; Groq now handles consented AI text and transcription.
 - [ ] Revoke the Groq key exposed in chat, have an adult account holder create a replacement, review Data Controls/model terms, and set it as the Supabase `GROQ_API_KEY` secret.
-- [ ] Resolve Deezer use permission and Google search result storage rights.
+- [x] Replace Deezer with Apple's iTunes Search API for music (October 1, 2026), removing the Deezer rights question.
+- [ ] Resolve Google search result storage rights.
 - [x] Record supplied logo provenance: generated with Nano Banana Pro and selected for this project.
 - [ ] Verify production provider/SMTP/retention settings and finalize policy/App Privacy labels.
 - [x] Apply production database migrations and deploy the release Edge Functions (September 12, 2026).
@@ -49,7 +50,7 @@ Retrieved September 11, 2026. Searched Apple developer documentation for review/
 | Privacy labels | Provider and data inventory below includes the built-in administrator statistics dashboard. | Confirm deployed services/logging configuration and enter final answers in App Store Connect. |
 | Age rating | No Made for Kids selection. Wellness reading and unfiltered music catalogue can include mature subjects/lyrics. | Complete current questionnaire honestly; do not assume 4+ or select all “None.” Review generated responses and catalogue content. |
 | Review access | Walkthrough below covers journaling, optional AI, reminders and deletion. | Create a confirmed disposable demo account and supply its credentials privately in App Store Connect; explain restricted administrator tools. |
-| Rights/completeness | Article links use attribution; music uses Deezer artwork/previews; fonts and images ship with the app. No active references to ScreenPlaceholder found. | Verify rights/terms for artwork, music previews, snippets, logo and bundled fonts. Public API availability is not proof of a distribution license. Run release-device tests. |
+| Rights/completeness | Article links use attribution; music uses Apple iTunes Search artwork/previews linked to Apple Music; fonts and images ship with the app. No active references to ScreenPlaceholder found. | Verify rights/terms for artwork, music previews, snippets, logo and bundled fonts. Public API availability is not proof of a distribution license. Run release-device tests. |
 | Login/payment | Email/password and optional Supabase anonymous login found; no social login or paid unlocks found. | Retest if adding third-party login, subscriptions or digital purchases; corresponding Apple login/payment requirements may apply. |
 | Native archive | Dependency privacy manifests exist in installed React Native, AsyncStorage and Expo modules. | Inspect aggregated manifest and SDK signatures in archive; do not guess required-reason API codes. Xcode is unavailable in the active local toolchain, so archive validation was not performed. |
 
@@ -64,9 +65,9 @@ Do not select “Data Not Collected.” Account-linked data includes anonymous S
 | Journal text, transcripts, addenda, tags / Other User Content | Supabase; Groq after consent | App Functionality, Product Personalization; linked |
 | Voice / Audio Data | Supabase; Groq for transcription (also automatic after saving voice entries with AI enabled) | App Functionality; linked |
 | Mood, energy and wellbeing content / Health, Sensitive Info where applicable | Supabase; Groq after consent | Functionality, Personalization and Analytics for admin mood/usage reports; linked |
-| Interests, goals, school year, music preferences / Other Data and applicable content categories | Supabase; Groq, Tavily or Google Custom Search, Deezer for enabled features | Personalization; linked internally even if no account ID is sent to provider |
+| Interests, goals, school year, music preferences / Other Data and applicable content categories | Supabase; Groq, Tavily or Google Custom Search, Apple iTunes Search for enabled features | Personalization; linked internally even if no account ID is sent to provider |
 | Entry counts/times, breathing and pseudonymous longitudinal trends / Product Interaction | Supabase and restricted administrator dashboard | Functionality and Analytics; account linkage remains possible |
-| IP/request metadata, errors / Diagnostics or Other Data as applicable | Hosting, Supabase, Google, Groq, Deezer and destination websites | Verify actual retention, association and purposes with each provider |
+| IP/request metadata, errors / Diagnostics or Other Data as applicable | Hosting, Supabase, Google, Groq, Apple and destination websites | Verify actual retention, association and purposes with each provider |
 
 No ad SDK or cross-company advertising tracking was found. This is a code finding, not verification of all provider practices. Do not request ATT solely because cloud services exist; reassess if tracking is introduced. Authentication SMTP is not identifiable from this repository. Reminder Gmail is identifiable. Verify Groq Data Controls, retention, subprocessors and selected-model terms before finalizing the policy. Do not promise zero retention without confirming the account configuration.
 

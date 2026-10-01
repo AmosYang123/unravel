@@ -29,7 +29,7 @@ export type SongSuggestion = {
 export type SongSuggestions = {
   picks: SongSuggestion[];
   basis: string;
-  source: "deezer" | "offline";
+  source: "itunes" | "deezer" | "offline";
 };
 
 /** One "add something" note. The entry's original text is never rewritten. */
@@ -99,7 +99,7 @@ export interface Settings {
   passcode: string;
   musicTastes: string[];
   musicArtists: string[];
-  /** Which Deezer artist a saved name means, when two share it. Keyed by name. */
+  /** Which iTunes artist a saved name means, when two share it. Keyed by name. */
   musicArtistIds: Record<string, number>;
   showMoodInHistory: boolean;
   /** Empty means they didn't say — nothing here is required. */

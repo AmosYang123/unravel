@@ -79,7 +79,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Unravel uses your microphone when you tap Record. Saving uploads the recording to your private journal account.",
+          "microphonePermission": "Unravel uses your microphone to record voice memos for your journal when you tap Record. For example, you can talk through your day instead of typing it. The recording is saved to your private journal account, and if you have turned on AI suggestions it is also sent to Groq to be transcribed into text.",
           "enableBackgroundRecording": false,
           "enableBackgroundPlayback": false
         }

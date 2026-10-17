@@ -47,3 +47,12 @@ it("names Groq as the AI processor without showing the removed Gemini processor"
   expect(screen.getByText(/send journal text.*to Groq/i)).toBeTruthy();
   expect(screen.queryByText(/Google Gemini/i)).toBeNull();
 });
+
+it("names Groq in the in-app consent and the microphone prompt, not only in the policy", async () => {
+  const { AI_SUGGESTIONS_CONSENT } = await import("../mobile/lib/privacy");
+  const appJson = (await import("../mobile/app.json")).default;
+  expect(AI_SUGGESTIONS_CONSENT).toMatch(/journal text.*voice recordings to Groq/);
+  const audio = appJson.expo.plugins.find((p) => Array.isArray(p) && p[0] === "expo-audio") as [string, { microphonePermission: string }];
+  expect(audio[1].microphonePermission).toMatch(/For example/);
+  expect(audio[1].microphonePermission).toMatch(/sent to Groq/);
+});

@@ -18,5 +18,5 @@ Suggested review path:
 4. Create a voice entry. The microphone prompt states that the recording is not sent to AI or transcription. Save and play it back from the entry detail screen.
 5. Open Settings → Privacy & data to see the on-device suggestions disclosure and the privacy-policy link.
 
-Public privacy policy: https://unravel.app/privacy
-Support: https://unravel.app/support
+Public privacy policy: https://officialunravel.vercel.app/privacy
+Support: https://officialunravel.vercel.app/support

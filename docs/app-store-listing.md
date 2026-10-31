@@ -11,7 +11,7 @@ file; it goes only into App Store Connect.
 
 ## Promotional text (170)
 
-Check in with yourself in thirty seconds or thirty minutes. Write, talk or just slide your mood. Optional AI reflections, songs and reading that fit your day.
+Check in with yourself in thirty seconds or thirty minutes. Write, talk or just slide your mood. Private, built-in reflections, songs and reading fit your day.
 
 ## Description (4000)
 
@@ -31,8 +31,8 @@ WAYS TO CHECK IN
 SEE YOUR PATTERNS
 Your timeline shows every entry with your moods and feelings. Patterns gently points out what tends to lift or weigh on your days.
 
-OPTIONAL AI SUGGESTIONS
-Turn them on and Unravel offers a short, kind reflection on an entry, songs from artists you like that fit your mood, and articles about the things you're into. They're off until you choose them, and you can turn them off any time. Journaling works either way.
+PRIVATE BUILT-IN SUGGESTIONS
+Unravel offers a short, kind reflection, songs that fit your mood, and a hand-checked shelf of reading. These use rules and content bundled with the app. Journal entries and recordings are not sent to third-party AI, transcription, search or music-lookup services.
 
 PRIVATE BY DESIGN
 • Your journal is private to your account and never public
@@ -61,7 +61,7 @@ For ages 13 and up.
 
 - **Primary category:** Health & Fitness
 - **Secondary category:** Lifestyle
-- **Content rights:** the app shows third-party content (song previews and artwork from Apple's iTunes Search API, linked to Apple Music; article links from web search). Answer "Yes, it contains third-party content" and confirm you have the rights to use it.
+- **Content rights:** the app links to hand-checked third-party articles. Answer based on the rights documentation and Apple's current questionnaire; there are no live song previews, artwork lookups or web-search results in build 12.
 - **Price:** Free
 - **EU Digital Services Act (trader status):** App Store Connect asks this before the app can be sold in the EU. As an individual with no business, choose "not a trader". To avoid the question for now, untick the EU countries under Pricing and Availability.
 
@@ -69,7 +69,7 @@ For ages 13 and up.
 
 Answer "None" to everything about violence, sexual content, profanity, drugs, gambling and horror. Then:
 
-- **Medical/Treatment Information:** Infrequent/Mild. The app offers wellbeing reading and AI reflections, but no diagnosis or treatment.
+- **Medical/Treatment Information:** Infrequent/Mild. The app offers general wellbeing reading and automated on-device reflections, but no diagnosis or treatment.
 - **Unrestricted Web Access:** No. Articles open single links; there is no general browser.
 - **User-generated content shared with others:** No. Journals are private.
 - **Messaging or chat:** No.
@@ -84,7 +84,7 @@ Answer "Yes, we collect data." For every type below, choose **Linked to the user
 | Contact Info → Name (only the optional nickname) | App Functionality, Product Personalization |
 | Health & Fitness → Health (mood and energy check-ins) | App Functionality, Product Personalization, Analytics |
 | User Content → Audio Data (voice memos) | App Functionality |
-| User Content → Other User Content (journal text, transcripts, tags) | App Functionality, Product Personalization |
+| User Content → Other User Content (journal text and tags) | App Functionality, Product Personalization |
 | Identifiers → User ID | App Functionality |
 | Usage Data → Product Interaction (entry counts and times) | App Functionality, Analytics |
 | Other Data (interests, goals, school year, music preferences) | Product Personalization |
@@ -99,11 +99,11 @@ No ads, no tracking, and no App Tracking Transparency prompt is needed.
 
 > Unravel is a private journaling app for ages 13 and up. Sign in with the demo account above.
 >
-> Optional AI suggestions are off until the user turns them on, either on the first setup screen or in Settings → Privacy & data. They need the user's permission, and the privacy policy names each service involved. With them on, saving an entry offers a short reflection, song suggestions (previews from Apple's iTunes Search API, linked to Apple Music) and a Reading tab of web articles.
+> Build 12 removes third-party AI processing. Journal text, moods, feelings, profile preferences and voice recordings are not sent to Groq, Gemini or another AI service. Advice and song suggestions use rules and content bundled with the app. Voice transcription and personalized external search have been removed. Reading uses a hand-checked bundled library.
 >
-> Settings opens with "Need to talk to someone now?", which points to local emergency numbers, 988 in the US, and findahelpline.com. AI reflections also suggest a trusted person or a crisis line if an entry mentions self-harm.
+> Settings opens with "Need to talk to someone now?", which points to local emergency numbers, 988 in the US, and findahelpline.com. General wellbeing suggestions may also recommend a trusted person or crisis line.
 >
-> The microphone is used only after tapping Record. Notifications are requested only when reminders are turned on. Account deletion is in Settings → Account → Delete account.
+> The microphone is used only after tapping Record. Voice recordings are stored in the user's private Supabase journal account for playback and are not sent to AI or transcription. Notifications are requested only when reminders are turned on. Account deletion is in Settings → Account → Delete account.
 >
 > The "Impact metrics" and developer controls in Settings are visible only to the two operators' admin accounts and show aggregate numbers only. The demo account is not an admin.
 >

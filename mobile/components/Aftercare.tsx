@@ -45,12 +45,9 @@ const keepOnEntry = (persist: Persist, id: string, patch: Partial<Entry>) => {
  * what comes back onto the entry. Failures stay quiet here — the panels keep
  * their own loading and error states for whoever opens them.
  *
- * Nothing at all happens when suggestions are off: the gate lives here rather
- * than at the call site so no caller can forget it.
+ * Both results are created locally from bundled content.
  */
 export function warmAftercare(entry: Entry, settings: Settings, persist: Persist) {
-  if (!settings.aiSuggestionsEnabled) return;
-
   if (!warmSongs.has(entry.id)) {
     const songs = fetchSongSuggestions(entry, settings, newSongSeed()).then((res) => {
       keepOnEntry(persist, entry.id, { songs: res });
@@ -82,11 +79,7 @@ function SuggestionsOff() {
   const styles = useStyles(createStyles);
   return (
     <Text style={[styles.body, { color: theme.colors.mutedForeground }]}>
-      Suggestions are off, so nothing about this entry was sent anywhere. Turn them back on in{" "}
-      <Link href="/settings" style={[styles.link, { color: theme.colors.mutedForeground }]}>
-        Settings
-      </Link>
-      <Text>.</Text>
+      Suggestions are created on-device from built-in content. Nothing about this entry is sent to an AI service.
     </Text>
   );
 }
@@ -94,7 +87,7 @@ function SuggestionsOff() {
 const OPTIONS: Record<PanelKey, { label: string; icon: LucideIcon }> = {
   music: { label: "Song options", icon: Music },
   breathe: { label: "Meditation", icon: Wind },
-  plan: { label: "AI advice & encouragement", icon: Compass },
+  plan: { label: "Advice & encouragement", icon: Compass },
 };
 
 /** Barely a paragraph, and a real sit-down. */
@@ -145,7 +138,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
   const [panel, setPanel] = useState<Panel>(null);
   // Both the songs and the advice describe this entry to a service, so both wait
   // on the same permission. Stored aftercare still shows: it is already here.
-  const suggestionsOn = settings.aiSuggestionsEnabled;
+  const suggestionsOn = true;
   // Fixed when the aftercare opens, so the buttons never rearrange under a
   // finger as a transcript or a plan lands.
   const [options] = useState(() => orderPanels(entry, settings.goals).map((key) => ({ key, ...OPTIONS[key] })));
@@ -169,10 +162,8 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
     entryRef.current = entry;
   }, [entry]);
 
-  const needsTranscript = entry.mode === "voice" && !entry.transcript && !!entry.audioPath;
-
   useEffect(() => {
-    if (!songAsk || !settings.aiSuggestionsEnabled) return;
+    if (!songAsk) return;
     let cancelled = false;
     const target = entryRef.current;
     setSongsLoading(true);
@@ -202,7 +193,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
   }, [songAsk]);
 
   useEffect(() => {
-    if (!planAsk || !settings.aiSuggestionsEnabled) return;
+    if (!planAsk) return;
     let cancelled = false;
     const target = entryRef.current;
     setPlanLoading(true);
@@ -294,15 +285,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
 
       {panel === "music" && (
         <Surface style={styles.panel}>
-          {suggestionsOn ? (
-            <Text style={[styles.body, { color: theme.colors.mutedForeground }]}>
-              {settings.musicArtists.length || settings.musicTastes.length
-                ? `Pulled live from your taste — ${[...settings.musicTastes, ...settings.musicArtists].slice(0, 4).join(", ")}${[...settings.musicTastes, ...settings.musicArtists].length > 4 ? "…" : ""} — and matched to this entry.`
-                : "Pulled live and matched to this entry."}
-            </Text>
-          ) : (
-            <SuggestionsOff />
-          )}
+          <Text style={[styles.body, { color: theme.colors.mutedForeground }]}>Chosen on-device from Unravel's built-in list. Nothing is sent to an AI service.</Text>
 
           {songsLoading && !shownSongs && (
             <View style={styles.loadingRow}>
@@ -368,7 +351,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
                   ? `From Apple Music · ${shownSongs.basis}`
                   : shownSongs.source === "deezer"
                     ? `From Deezer · ${shownSongs.basis}`
-                    : "Live picks couldn't answer just now, so these come from the built-in list."}
+                    : `Built-in list · ${shownSongs.basis}`}
               </Text>
             </View>
           )}
@@ -413,7 +396,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
             <View style={styles.loadingRow}>
               <ActivityIndicator color={theme.colors.mutedForeground} size="small" />
               <Text style={[styles.body, { color: theme.colors.mutedForeground }]}>
-                {needsTranscript ? "Listening to your memo, then reading it…" : "Reading your entry…"}
+                Considering your check-in on-device…
               </Text>
             </View>
           )}
@@ -451,9 +434,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
                 </Pressable>
               )}
               <Text style={[styles.planBasis, { color: theme.colors.mutedForeground }]}>
-                {shownPlan.basis}. What's sent is this entry itself — mood, energy, feelings, prompt, pre-writing
-                answers, and its text or voice recording — never your name or anything else you've written. Turn this
-                off any time in Settings.
+                {shownPlan.basis}. Your entry is not sent to an AI provider.
               </Text>
             </View>
           )}

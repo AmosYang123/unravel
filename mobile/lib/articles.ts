@@ -192,14 +192,13 @@ export function recentConcerns(entries: Entry[]): string {
  * at all and only the first-run answers travel. The shelf still comes back —
  * it is just built from what they told us rather than what they wrote.
  */
-export function articleRequest(entries: Entry[], settings: Settings, refresh: boolean): ArticleRequest {
-  const suggestions = settings.aiSuggestionsEnabled;
+export function articleRequest(_entries: Entry[], settings: Settings, refresh: boolean): ArticleRequest {
   return {
     refresh,
     reader: readerProfile(settings),
-    signals: suggestions ? entrySignals(entries) : null,
-    concerns: suggestions ? recentConcerns(entries) : "",
-    suggestions,
+    signals: null,
+    concerns: "",
+    suggestions: false,
   };
 }
 

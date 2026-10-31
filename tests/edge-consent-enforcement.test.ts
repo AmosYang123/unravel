@@ -8,14 +8,12 @@ import { buildShelves, shelfSignalText } from "../supabase/functions/article-rec
 
 afterEach(() => vi.restoreAllMocks());
 
-it.each(["entry-advice", "normalize-tag", "transcribe-voice"])("%s uses Groq and contains no Gemini credential or endpoint", (name) => {
+it.each(["entry-advice", "normalize-tag", "transcribe-voice", "spotify-songs"])("%s contains no external provider endpoint or secret", (name) => {
   const source = readFileSync(`supabase/functions/${name}/index.ts`, "utf8");
-  expect(source).toContain("https://api.groq.com/openai/v1/");
-  expect(source).toContain("GROQ_API_KEY");
-  expect(source).not.toMatch(/GEMINI_API_KEY|generativelanguage\.googleapis\.com/);
+  expect(source).not.toMatch(/api\.groq\.com|itunes\.apple\.com|GROQ_API_KEY|GEMINI_API_KEY/);
 });
 
-it.each(["entry-advice", "transcribe-voice", "normalize-tag", "spotify-songs"])("%s refuses external processing without current consent", async (name) => {
+it.each(["entry-advice", "transcribe-voice", "normalize-tag", "spotify-songs"])("%s refuses external processing permanently", async (name) => {
   const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("External calls must not occur"));
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) },
@@ -31,7 +29,7 @@ it.each(["entry-advice", "transcribe-voice", "normalize-tag", "spotify-songs"])(
   new Function("createClient", "Deno", "z", "hasSharingConsent", compiled)(() => client, deno, z, hasSharingConsent);
   if (!handler) throw new Error("Handler was not registered");
   const result = await handler(new Request("https://test/function", { method: "POST", headers: { Authorization: "Bearer test" }, body: "{}" }));
-  expect(result.status).toBe(403);
+  expect(result.status).toBe(410);
   expect(fetch).not.toHaveBeenCalled();
 });
 

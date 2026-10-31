@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { AI_SUGGESTIONS_CONSENT, AI_SUGGESTIONS_SUMMARY, CRISIS_HELP, CRISIS_HELP_URL } from "@/lib/privacy";
+import { CRISIS_HELP, CRISIS_HELP_URL } from "@/lib/privacy";
 import { releaseConfig } from "@/lib/release-config";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -800,8 +800,6 @@ interface PrivacySectionProps {
  * without a tap. Only "Recently deleted", a list, opens in a dialog.
  */
 function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySectionProps) {
-  const [confirmSharing, setConfirmSharing] = useState(false);
-  const [savingSharing, setSavingSharing] = useState(false);
   const { theme } = useTheme();
   const styles = useStyles(createStyles);
   const { settings, update } = useSettings();
@@ -813,18 +811,6 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
   const [showDeleted, setShowDeleted] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<string | null>(null);
-
-  const saveSharing = async (enabled: boolean) => {
-    setConfirmSharing(false);
-    setSavingSharing(true);
-    try {
-      await update({ aiSuggestionsEnabled: enabled });
-    } catch {
-      toast("Couldn't save your sharing choice. Please try again.");
-    } finally {
-      setSavingSharing(false);
-    }
-  };
 
   const closeCodeEditor = () => {
     setEditingCode(false);
@@ -972,28 +958,10 @@ function PrivacySection({ exporting, onExport, onClearAllRequest }: PrivacySecti
         </>
       )}
       <Divider />
-      <Row
-        title="AI suggestions"
-        description={AI_SUGGESTIONS_SUMMARY}
-      >
-        <Switch
-          value={settings.aiSuggestionsEnabled}
-          disabled={savingSharing}
-          onValueChange={(v) => v ? setConfirmSharing(true) : void saveSharing(false)}
-          trackColor={{ true: theme.colors.accent }}
-        />
+      <Row title="On-device suggestions" description="Advice and song ideas are selected on your device from built-in content. Journal entries and recordings are not sent to an AI service.">
+        <Text style={[styles.helperText, { color: theme.colors.mutedForeground }]}>Always private</Text>
       </Row>
-
       <Divider />
-      <ConfirmDialog
-        visible={confirmSharing}
-        title="Turn on AI suggestions?"
-        description={AI_SUGGESTIONS_CONSENT}
-        confirmLabel="Turn on"
-        cancelLabel="Not now"
-        onConfirm={() => void saveSharing(true)}
-        onCancel={() => setConfirmSharing(false)}
-      />
       <Row title="Export a copy" description="Save all your entries as a text file.">
         <Button label={exporting ? "Gathering…" : "Export"} variant="ghost" onPress={onExport} disabled={exporting} />
       </Row>

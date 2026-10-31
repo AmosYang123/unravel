@@ -1,58 +1,34 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import PrivacySection from "../src/components/settings/PrivacySection";
 import Privacy from "../src/pages/Privacy";
 
-const mocks = vi.hoisted(() => ({ update: vi.fn(), toast: vi.fn() }));
-vi.mock("sonner", () => ({ toast: mocks.toast }));
+vi.mock("sonner", () => ({ toast: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("@/lib/store", () => ({
-  useSettings: () => ({ settings: { aiSuggestionsEnabled: false }, update: mocks.update }),
+  useSettings: () => ({ settings: { lockEnabled: false }, update: vi.fn() }),
   useEntries: () => ({ deletedEntries: [], loading: false }),
   fetchAllEntries: vi.fn(), hashPasscode: vi.fn(),
 }));
-beforeEach(() => { mocks.update.mockReset().mockResolvedValue(undefined); });
 afterEach(cleanup);
 
-it("does not enable sharing until the person reads the notice and confirms", async () => {
+it("shows that suggestions do not share journal content externally", () => {
   render(<MemoryRouter><PrivacySection /></MemoryRouter>);
-  fireEvent.click(screen.getAllByRole("switch")[1]!);
-  expect(mocks.update).not.toHaveBeenCalled();
-  expect(screen.getByText(/journal text.*voice recordings.*to Groq/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Not now" }));
-  expect(mocks.update).not.toHaveBeenCalled();
-  fireEvent.click(screen.getAllByRole("switch")[1]!);
-  fireEvent.click(screen.getByRole("button", { name: "Allow sharing" }));
-  await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ aiSuggestionsEnabled: true }));
+  expect(screen.getByText("On-device suggestions")).toBeTruthy();
+  expect(screen.getByText(/not sent to an AI, search, music lookup, or transcription service/i)).toBeTruthy();
+  expect(screen.queryByRole("switch", { name: /AI suggestions/i })).toBeNull();
 });
 
-it("reports a failed consent save without pretending it succeeded", async () => {
-  mocks.update.mockRejectedValue(new Error("offline"));
-  render(<MemoryRouter><PrivacySection /></MemoryRouter>);
-  fireEvent.click(screen.getAllByRole("switch")[1]!);
-  fireEvent.click(screen.getByRole("button", { name: "Allow sharing" }));
-  await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("Couldn't save your sharing choice. Please try again."));
-});
-
-it("renders the public policy without account information", () => {
+it("public policy identifies processors and says third-party AI sharing is absent", () => {
   render(<MemoryRouter><Privacy /></MemoryRouter>);
   expect(screen.getByRole("heading", { name: "Privacy policy" })).toBeTruthy();
-  expect(screen.getByText(/administrator dashboard/)).toBeTruthy();
-  expect(screen.getByText(/Google's Gmail API/)).toBeTruthy();
+  expect(screen.getByText(/Supabase provides authentication/i)).toBeTruthy();
+  expect(screen.getByText(/does not send journal entries.*third-party AI service/i)).toBeTruthy();
 });
 
-it("names Groq as the AI processor without showing the removed Gemini processor", () => {
-  render(<MemoryRouter><Privacy /></MemoryRouter>);
-  expect(screen.getByText(/send journal text.*to Groq/i)).toBeTruthy();
-  expect(screen.queryByText(/Google Gemini/i)).toBeNull();
-});
-
-it("names Groq in the in-app consent and the microphone prompt, not only in the policy", async () => {
-  const { AI_SUGGESTIONS_CONSENT } = await import("../mobile/lib/privacy");
+it("microphone prompt says recordings are not sent for AI or transcription", async () => {
   const appJson = (await import("../mobile/app.json")).default;
-  expect(AI_SUGGESTIONS_CONSENT).toMatch(/journal text.*voice recordings to Groq/);
   const audio = appJson.expo.plugins.find((p) => Array.isArray(p) && p[0] === "expo-audio") as [string, { microphonePermission: string }];
-  expect(audio[1].microphonePermission).toMatch(/For example/);
-  expect(audio[1].microphonePermission).toMatch(/sent to Groq/);
+  expect(audio[1].microphonePermission).toMatch(/not sent to an AI or transcription service/i);
 });

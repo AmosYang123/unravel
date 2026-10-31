@@ -1,5 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
-
 /**
  * The two boxes where you type something and press Add — artists in Settings,
  * interests in onboarding — run what you typed past the normalize-tag function
@@ -126,81 +124,6 @@ export function tagAction(outcome: TagOutcome): { label: string; value: string }
   return null;
 }
 
-/* -- what the edge function sends back ---------------------------------- */
-
-type Source = "match" | "canonical" | "guess" | "none";
-type ServerResult = { input: string; value: string; source: Source };
-
-const SOURCES: Source[] = ["match", "canonical", "guess", "none"];
-
-const isServerResult = (value: unknown): value is ServerResult => {
-  if (typeof value !== "object" || value === null) return false;
-  const { input, value: name, source } = value as Record<string, unknown>;
-  return (
-    typeof input === "string" &&
-    typeof name === "string" &&
-    typeof source === "string" &&
-    SOURCES.includes(source as Source)
-  );
-};
-
-const readResults = (data: unknown): ServerResult[] => {
-  const results = (data as { results?: unknown } | null)?.results;
-  return Array.isArray(results) ? results.filter(isServerResult) : [];
-};
-
-/* -- how close two spellings are ---------------------------------------- */
-// The same rule the edge function applies to iTunes' results, repeated here
-// because that runs on Deno and this runs in the app.
-
-/** Case, accents and punctuation removed, so "Beyoncé!" and "beyonce" compare equal. */
-const fold = (value: string): string =>
-  value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-
-function distance(a: string, b: string): number {
-  if (a === b) return 0;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const row = [i];
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      row.push(Math.min((row[j - 1] ?? 0) + 1, (prev[j] ?? 0) + 1, (prev[j - 1] ?? 0) + cost));
-    }
-    prev = row;
-  }
-  return prev[b.length] ?? Math.max(a.length, b.length);
-}
-
-/** One or two slipped keys in a word that long — not a different word. */
-const closeEnough = (a: string, b: string): boolean => {
-  const d = distance(a, b);
-  return d <= Math.min(3, Math.max(1, Math.floor(Math.min(a.length, b.length) / 6)));
-};
-
-const outcomeFor = (kind: TagKind, result: ServerResult): TagOutcome => {
-  const original = result.input;
-  // "none" first: nothing found is not the same as nothing to change, and an
-  // artist nobody can find is worth saying out loud.
-  if (result.source === "none") {
-    return { original, value: original, status: kind === "artist" ? "unmatched" : "kept" };
-  }
-  if (result.source === "match" || result.value === original) {
-    return { original, value: original, status: "kept" };
-  }
-  // iTunes' own spelling, or a guess so close it is plainly the same word:
-  // apply it and say plainly what it became. Anything further is asked, not
-  // assumed.
-  if (result.source === "canonical" || closeEnough(fold(original), fold(result.value))) {
-    return { original, value: result.value, status: "corrected", suggestion: original };
-  }
-  return { original, value: original, status: "unsure", suggestion: result.value };
-};
-
 /**
  * Checks one line of typing. Returns one outcome per chip, in the order they
  * should appear. Never throws, and never returns nothing when something was
@@ -211,33 +134,11 @@ const outcomeFor = (kind: TagKind, result: ServerResult): TagOutcome => {
  * catalogue lookup of one name and not a reading of anything they wrote.
  */
 export async function resolveTags(
-  kind: TagKind,
+  _kind: TagKind,
   raw: string,
-  allowModel: boolean,
+  _allowModel: boolean,
 ): Promise<TagOutcome[]> {
   const terms = splitTagInput(raw);
   if (!terms.length) return [];
-  const kept: TagOutcome[] = terms.map((term) => ({ original: term, value: term, status: "kept" }));
-  if (kind === "interest" && !allowModel) return kept;
-
-  try {
-    // The unsplit line, so a name with a comma in it gets the first look.
-    const whole = raw.trim().replace(/\s+/g, " ").slice(0, MAX_TAG_LENGTH);
-    const { data, error } = await supabase.functions.invoke("normalize-tag", {
-      body: {
-        kind,
-        terms,
-        allowModel,
-        ...(kind === "artist" && whole && !terms.includes(whole) ? { whole } : {}),
-      },
-    });
-    if (error) throw error;
-    if ((data as { error?: unknown } | null)?.error) throw new Error("normalize-tag declined");
-
-    const results = readResults(data);
-    return results.length ? results.map((result) => outcomeFor(kind, result)) : kept;
-  } catch {
-    // Never blocks: a check that doesn't happen just means the words stand.
-    return kept;
-  }
+  return terms.map((term) => ({ original: term, value: term, status: "kept" }));
 }

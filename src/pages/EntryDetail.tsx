@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bookmark, FileText, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bookmark, Loader2, Plus, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,13 +17,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import Aftercare from "@/components/Aftercare";
 import { ENERGY_LABELS, MODE_META, MOOD_LABELS } from "@/lib/content";
-import { fetchEntry, signedAudioUrl, useEntries, useSettings } from "@/lib/store";
-import { transcribeVoiceMemo } from "@/lib/advice";
+import { fetchEntry, signedAudioUrl, useEntries } from "@/lib/store";
 import type { Addendum, Entry } from "@/lib/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-const LONG_MEMO_SECONDS = 300;
 
 /**
  * Each format's pre-writing sliders ask their own question. This maps the exact
@@ -122,7 +119,6 @@ const EntryDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { entries, loading, removeEntry, restoreEntry, updateEntry, setKept } = useEntries();
-  const { settings } = useSettings();
   const stored = entries.find((e) => e.id === id);
   // An entry older than the loaded pages is fetched on its own. `fetched` holds
   // the answer for one id, including "there is no such entry" as a null entry,
@@ -134,8 +130,6 @@ const EntryDetail = () => {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioError, setAudioError] = useState(false);
   const [audioAttempt, setAudioAttempt] = useState(0);
-  const [transcribing, setTranscribing] = useState(false);
-  const [transcribeError, setTranscribeError] = useState<string | null>(null);
   const [showFull, setShowFull] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [kept, setKeptDisplay] = useState(false);
@@ -211,7 +205,6 @@ const EntryDetail = () => {
     );
   }
 
-  const isLong = (entry.audioSeconds ?? 0) > LONG_MEMO_SECONDS;
   const moodLabel = MOOD_LABELS[Math.min(Math.max(entry.mood, 1), MOOD_LABELS.length) - 1];
   const energyLabel = ENERGY_LABELS[Math.min(Math.max(entry.energy, 1), ENERGY_LABELS.length) - 1];
   const intent = intentLine(entry.intent);
@@ -245,25 +238,6 @@ const EntryDetail = () => {
       setNoteError(err instanceof Error ? err.message : "That didn't save just now.");
     } finally {
       setNoteSaving(false);
-    }
-  };
-
-  const transcribe = async () => {
-    setTranscribing(true);
-    setTranscribeError(null);
-    try {
-      const result = await transcribeVoiceMemo(entry.id);
-      const transcribed: Partial<Entry> = {
-        transcript: result.transcript,
-        transcriptSummary: result.summary ?? undefined,
-        transcriptStatus: "done",
-      };
-      await updateEntry(entry.id, transcribed);
-      applyLocalPatch(transcribed);
-    } catch (err) {
-      setTranscribeError(err instanceof Error ? err.message : "That didn't work just now.");
-    } finally {
-      setTranscribing(false);
     }
   };
 
@@ -459,39 +433,12 @@ const EntryDetail = () => {
               <p className="text-sm text-muted-foreground">Loading the recording…</p>
             )}
 
-            {!entry.transcript && settings.aiSuggestionsEnabled && (
-              <div>
-                <Button
-                  variant="secondary"
-                  onClick={transcribe}
-                  disabled={transcribing}
-                  className="rounded-full"
-                >
-                  {transcribing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="mr-2 h-4 w-4" />
-                  )}
-                  {transcribing ? "Sending it off…" : isLong ? "Read it instead (with a recap)" : "Read it instead"}
-                </Button>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {transcribing
-                    ? "It can take a minute or two to come back, longer for a longer recording. You can keep reading while you wait."
-                    : isLong
-                      ? "Over five minutes, so you'll get a short recap plus the full text."
-                      : "Turns this memo into text you can skim later."}
-                </p>
-              </div>
-            )}
-
-            {!entry.transcript && !settings.aiSuggestionsEnabled && (
+            {!entry.transcript && (
               <p className="text-sm text-muted-foreground">
-                Reading this back as text is off because it would send the recording to be transcribed. Turn AI
-                suggestions back on in Settings to use it.
+                This recording stays in your private journal account. Unravel does not send it to an AI or
+                transcription service.
               </p>
             )}
-
-            {transcribeError && <p className="text-sm text-destructive">{transcribeError}</p>}
 
             {entry.transcript && (
               <div className="surface p-5">

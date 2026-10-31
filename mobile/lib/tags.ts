@@ -1,5 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
-
 /**
  * The two boxes where you type something and press Add — artists in Settings,
  * interests in onboarding — run what you typed past the normalize-tag function
@@ -211,33 +209,11 @@ const outcomeFor = (kind: TagKind, result: ServerResult): TagOutcome => {
  * catalogue lookup of one name and not a reading of anything they wrote.
  */
 export async function resolveTags(
-  kind: TagKind,
+  _kind: TagKind,
   raw: string,
-  allowModel: boolean,
+  _allowModel: boolean,
 ): Promise<TagOutcome[]> {
   const terms = splitTagInput(raw);
   if (!terms.length) return [];
-  const kept: TagOutcome[] = terms.map((term) => ({ original: term, value: term, status: "kept" }));
-  if (kind === "interest" && !allowModel) return kept;
-
-  try {
-    // The unsplit line, so a name with a comma in it gets the first look.
-    const whole = raw.trim().replace(/\s+/g, " ").slice(0, MAX_TAG_LENGTH);
-    const { data, error } = await supabase.functions.invoke("normalize-tag", {
-      body: {
-        kind,
-        terms,
-        allowModel,
-        ...(kind === "artist" && whole && !terms.includes(whole) ? { whole } : {}),
-      },
-    });
-    if (error) throw error;
-    if ((data as { error?: unknown } | null)?.error) throw new Error("normalize-tag declined");
-
-    const results = readResults(data);
-    return results.length ? results.map((result) => outcomeFor(kind, result)) : kept;
-  } catch {
-    // Never blocks: a check that doesn't happen just means the words stand.
-    return kept;
-  }
+  return terms.map((term) => ({ original: term, value: term, status: "kept" }));
 }

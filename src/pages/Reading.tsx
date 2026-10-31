@@ -43,10 +43,8 @@ const Reading = () => {
   );
 
   const entriesKey = entries.map((e) => e.id).join(",");
-  // What the shelf is built from besides the entries: the privacy switch and
-  // the first-run answers. Change one of those and the shelf should follow.
+  // The shelf uses only first-run preferences, never journal content.
   const readerKey = [
-    settings.aiSuggestionsEnabled,
     settings.yearLevel,
     settings.focusAreas.join("|"),
     settings.goals.join("|"),
@@ -80,12 +78,10 @@ const Reading = () => {
           A small shelf of articles, gathered around whatever you've been carrying lately.{" "}
           <span className="mark">Nothing to finish</span> — read one, or none.
         </p>
-        {!settings.aiSuggestionsEnabled && (
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-            AI suggestions are off, so nothing you've written is sent for this. New shelves are built from what
-            you told us when you set up instead. Turn suggestions back on in Settings to include your entries.
-          </p>
-        )}
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
+          Your journal entries are never sent to an AI or search service. This shelf comes from Unravel's
+          built-in reading library and the interests you chose in setup.
+        </p>
       </header>
 
       {loading ? (

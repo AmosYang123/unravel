@@ -31,6 +31,12 @@ const newSongSeed = () => Math.floor(Math.random() * 997);
 const warmSongs = new Map<string, Promise<SongSuggestions>>();
 const warmPlans = new Map<string, Promise<SupportPlan>>();
 
+const SuggestionsOff = () => (
+  <p className="text-sm leading-relaxed text-muted-foreground">
+    Suggestions are created from Unravel's built-in library without sending this entry to an outside service.
+  </p>
+);
+
 /** Writing the aftercare back is best effort; the panel still shows what came back. */
 const keepOnEntry = (persist: Persist, id: string, patch: Partial<Entry>) => {
   void persist(id, patch).catch((err: unknown) => {
@@ -47,8 +53,6 @@ const keepOnEntry = (persist: Persist, id: string, patch: Partial<Entry>) => {
  * than at the call site so no caller can forget it.
  */
 export function warmAftercare(entry: Entry, settings: Settings, persist: Persist) {
-  if (!settings.aiSuggestionsEnabled) return;
-
   if (!warmSongs.has(entry.id)) {
     const songs = fetchSongSuggestions(entry, settings, newSongSeed()).then((res) => {
       keepOnEntry(persist, entry.id, { songs: res });
@@ -75,20 +79,10 @@ export function warmAftercare(entry: Entry, settings: Settings, persist: Persist
 }
 
 /** Shown in place of anything fetched, so the setting's effect is never a mystery. */
-const SuggestionsOff = () => (
-  <p className="text-sm leading-relaxed text-muted-foreground">
-    Suggestions are off, so nothing about this entry was sent anywhere. Turn them back on in{" "}
-    <Link to="/settings" className="underline underline-offset-4">
-      Settings
-    </Link>
-    .
-  </p>
-);
-
 const OPTIONS: Record<PanelKey, { label: string; icon: LucideIcon }> = {
   music: { label: "Song options", icon: Music },
   breathe: { label: "Meditation", icon: Wind },
-  plan: { label: "AI advice & encouragement", icon: Compass },
+  plan: { label: "Advice & encouragement", icon: Compass },
 };
 
 /** Barely a paragraph, and a real sit-down. */
@@ -132,7 +126,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
   const [panel, setPanel] = useState<Panel>(null);
   // Both the songs and the advice describe this entry to a service, so both wait
   // on the same permission. Stored aftercare still shows: it is already here.
-  const suggestionsOn = settings.aiSuggestionsEnabled;
+  const suggestionsOn = true;
   // Fixed when the aftercare opens, so the buttons never rearrange under a
   // finger as a transcript or a plan lands.
   const [options] = useState(() => orderPanels(entry, settings.goals).map((key) => ({ key, ...OPTIONS[key] })));
@@ -151,15 +145,14 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
   const shownPlan = plan ?? entry.advice ?? null;
 
   const entryRef = useRef(entry);
+  const needsTranscript = false;
 
   useEffect(() => {
     entryRef.current = entry;
   }, [entry]);
 
-  const needsTranscript = entry.mode === "voice" && !entry.transcript && !!entry.audioPath;
-
   useEffect(() => {
-    if (!songAsk || !settings.aiSuggestionsEnabled) return;
+    if (!songAsk) return;
     let cancelled = false;
     const target = entryRef.current;
     setSongsLoading(true);
@@ -189,7 +182,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
   }, [songAsk]);
 
   useEffect(() => {
-    if (!planAsk || !settings.aiSuggestionsEnabled) return;
+    if (!planAsk) return;
     let cancelled = false;
     const target = entryRef.current;
     setPlanLoading(true);
@@ -385,7 +378,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
           {planLoading && !shownPlan && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {needsTranscript ? "Listening to your memo, then reading it…" : "Reading your entry…"}
+              {needsTranscript ? "Considering your check-in…" : "Considering your check-in on-device…"}
             </p>
           )}
 
@@ -418,9 +411,7 @@ const Aftercare = ({ entry, revisit }: { entry: Entry; revisit?: boolean }) => {
                 </button>
               )}
               <p className="mt-4 text-xs text-muted-foreground">
-                {shownPlan.basis}. What's sent is this entry itself — mood, energy, feelings, prompt, pre-writing
-                answers, and its text or voice recording — never your name or anything else you've written. Turn this
-                off any time in Settings.
+                {shownPlan.basis}. This entry stays in Unravel and is not sent to an AI or another suggestion service.
               </p>
             </div>
           )}

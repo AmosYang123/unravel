@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { AI_SHARING_NOTICE } from "@/lib/privacy";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -28,8 +27,6 @@ const PrivacySection = () => {
   const { settings, update } = useSettings();
   const { deletedEntries, clearAll, loading, error, restoreEntry, purgeEntry } = useEntries();
   const { user } = useAuth();
-  const [confirmSharing, setConfirmSharing] = useState(false);
-  const [savingSharing, setSavingSharing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
   const [editingCode, setEditingCode] = useState(false);
@@ -37,18 +34,6 @@ const PrivacySection = () => {
   const [confirmCode, setConfirmCode] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
-
-  const saveSharing = async (enabled: boolean) => {
-    setConfirmSharing(false);
-    setSavingSharing(true);
-    try {
-      await update({ aiSuggestionsEnabled: enabled });
-    } catch {
-      toast("Couldn't save your sharing choice. Please try again.");
-    } finally {
-      setSavingSharing(false);
-    }
-  };
 
   const deletedSummary = loading
     ? "Loading…"
@@ -214,15 +199,9 @@ const PrivacySection = () => {
           </Row>
         )}
         <Row
-          title="AI suggestions"
-          description="Optional sharing with Groq, Google Search and Apple Music. Review the details before enabling. Your journal still syncs to Supabase when this is off."
-        >
-          <Switch
-            checked={settings.aiSuggestionsEnabled}
-            disabled={savingSharing}
-            onCheckedChange={(v) => v ? setConfirmSharing(true) : void saveSharing(false)}
-          />
-        </Row>
+          title="On-device suggestions"
+          description="Advice and song suggestions use Unravel's built-in library. Journal content and recordings are not sent to an AI, search, music lookup, or transcription service."
+        ><span className="text-sm text-muted-foreground">Always private</span></Row>
         <Row title="Export a copy" description="A clearly labelled text file with your preferences and every entry, newest first.">
           <Button variant="secondary" onClick={exportData} disabled={exporting} className="rounded-full">
             {exporting ? "Gathering…" : "Export"}
@@ -268,18 +247,6 @@ const PrivacySection = () => {
         </Row>
       </div>
 
-      <AlertDialog open={confirmSharing} onOpenChange={setConfirmSharing}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Allow optional data sharing?</AlertDialogTitle>
-            <AlertDialogDescription>{AI_SHARING_NOTICE}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Not now</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void saveSharing(true)}>Allow sharing</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <Dialog
         open={showDeleted}
         onClose={() => setShowDeleted(false)}

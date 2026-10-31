@@ -23,7 +23,7 @@ const Settings = () => (
     <PrivacySection />
 
     <p className="mt-12 text-xs leading-relaxed text-muted-foreground">
-      Your journal syncs to Supabase. AI sharing is optional and can be turned off in Privacy & data.
+      Your journal syncs to Supabase. Suggestions use content bundled with Unravel and do not send entries to AI.
     </p>
   </AppShell>
 );

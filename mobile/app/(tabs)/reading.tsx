@@ -54,10 +54,8 @@ export default function ReadingScreen() {
   );
 
   const entriesKey = entries.map((e) => e.id).join(",");
-  // What the shelf is built from besides the entries: the privacy switch and
-  // the first-run answers. Change one of those and the shelf should follow.
+  // The shelf uses only first-run preferences, never journal content.
   const readerKey = [
-    settings.aiSuggestionsEnabled,
     settings.yearLevel,
     settings.focusAreas.join("|"),
     settings.goals.join("|"),
@@ -113,13 +111,10 @@ export default function ReadingScreen() {
                 </Text>{" "}
                 — read one, or none.
               </Text>
-              {!settings.aiSuggestionsEnabled && (
-                <Text style={[styles.privacyNote, { color: theme.colors.mutedForeground }]}>
-                  AI suggestions are off, so nothing you've written is sent for this. New shelves are built
-                  from what you told us when you set up instead. Turn suggestions back on in Settings to
-                  include your entries.
-                </Text>
-              )}
+              <Text style={[styles.privacyNote, { color: theme.colors.mutedForeground }]}>
+                Your journal entries are never sent to an AI or search service. This shelf comes from Unravel's
+                built-in reading library and the interests you chose in setup.
+              </Text>
             </View>
 
             {loading ? (

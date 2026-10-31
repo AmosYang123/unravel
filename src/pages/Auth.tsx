@@ -333,7 +333,7 @@ const AuthPage = () => {
         : "Welcome back";
   const blurb =
     mode === "signup"
-      ? "Your entries, recordings and preferences sync to your private account using Supabase. Optional AI sharing is off until you allow it."
+      ? "Your entries, recordings and preferences sync to your private account using Supabase. They are not sent to a third-party AI service."
       : mode === "forgot"
         ? "Give us the address you signed up with and we'll email you a link to set a new password."
         : "Sign in to reach your entries and preferences.";

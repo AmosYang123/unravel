@@ -10,11 +10,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import { Button, Chip } from "@/components/ui";
 import { FOCUS_AREAS, GOALS, MAX_INTERESTS, optionalSetupPatch, YEAR_LEVELS } from "@/lib/onboarding";
-import { AI_SUGGESTIONS_CONSENT, AI_SUGGESTIONS_SUMMARY } from "@/lib/privacy";
 import { useSettings } from "@/lib/store";
 import {
   applyTagOutcomes,
@@ -30,8 +29,7 @@ import type { YearLevel } from "@/lib/types";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
 
-/** The AI suggestions question, then the four question screens. */
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 /** Adds or removes one id, leaving the rest of the picks alone. */
 const toggle = (list: string[], id: string): string[] =>
@@ -112,21 +110,6 @@ export default function OnboardingScreen() {
     } catch (err) {
       console.error("could not save onboarding answers", err);
       setError("That didn't save. Try once more, or skip for now.");
-      setBusy(false);
-    }
-  };
-
-  const chooseSuggestions = async (enabled: boolean) => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (enabled) await update({ aiSuggestionsEnabled: true });
-      setStep((n) => n + 1);
-    } catch (err) {
-      console.error("could not save AI suggestions choice", err);
-      setError("That didn't save. Try again, or choose Not now.");
-    } finally {
       setBusy(false);
     }
   };
@@ -297,19 +280,10 @@ export default function OnboardingScreen() {
             </Text>
           )}
 
-          {!editing && step === 0 ? (
-            <>
-              <Text style={[styles.title, { color: theme.colors.foreground }]}>Turn on AI suggestions?</Text>
-              <Text style={[styles.lede, { color: theme.colors.foreground }]}>{AI_SUGGESTIONS_SUMMARY}</Text>
-              <Text style={[styles.hint, { color: theme.colors.mutedForeground }]}>{AI_SUGGESTIONS_CONSENT}</Text>
-              <Link href="/privacy" style={[styles.hint, styles.learnMore, { color: theme.colors.foreground }]}>
-                Learn more
-              </Link>
-            </>
-          ) : editing ? (
+          {editing ? (
             questions
           ) : (
-            questions[step - 1]
+            questions[step]
           )}
 
           {error && <Text style={[styles.error, { color: theme.colors.destructive }]}>{error}</Text>}
@@ -319,13 +293,6 @@ export default function OnboardingScreen() {
               <Button label="Save changes" onPress={() => void finish()} disabled={busy} style={styles.save} />
               <Pressable onPress={() => router.back()} disabled={busy} accessibilityRole="button">
                 <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Cancel</Text>
-              </Pressable>
-            </>
-          ) : step === 0 ? (
-            <>
-              <Button label="Turn on" onPress={() => void chooseSuggestions(true)} disabled={busy} style={styles.save} />
-              <Pressable onPress={() => void chooseSuggestions(false)} disabled={busy} accessibilityRole="button">
-                <Text style={[styles.skip, { color: theme.colors.mutedForeground }]}>Not now</Text>
               </Pressable>
             </>
           ) : (
@@ -354,8 +321,6 @@ const createStyles = (fonts: FontSet) => StyleSheet.create({
   scroll: { paddingHorizontal: 24, paddingVertical: 40, maxWidth: 420, width: "100%", alignSelf: "center" },
   title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34 },
   progress: { fontFamily: fonts.body, fontSize: 13, marginBottom: 12 },
-  learnMore: { textDecorationLine: "underline", marginTop: 12 },
-  lede: { fontFamily: fonts.body, fontSize: 14, lineHeight: 22, marginTop: 12 },
   question: { fontFamily: fonts.display, fontSize: 19, lineHeight: 26, marginTop: 32 },
   hint: { fontFamily: fonts.body, fontSize: 13, lineHeight: 20, marginTop: 6 },
   input: {

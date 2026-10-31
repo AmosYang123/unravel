@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { PRIVACY_SECTIONS } from "@/lib/privacy";
+import { PRIVACY_SECTIONS, PRIVACY_UPDATED } from "@/lib/privacy";
 import SupportContact from "@/components/SupportContact";
 
 export default function Privacy() {
@@ -7,7 +7,7 @@ export default function Privacy() {
     <main className="mx-auto max-w-2xl px-6 py-12">
       <Link to="/auth" className="text-sm underline">Back to Unravel</Link>
       <h1 className="page-title mt-8">Privacy policy</h1>
-      <p className="mt-3 text-sm text-muted-foreground">Updated September 12, 2026</p>
+      <p className="mt-3 text-sm text-muted-foreground">Updated {PRIVACY_UPDATED}</p>
       {PRIVACY_SECTIONS.map(({ title, text }) => (
         <section key={title} className="mt-8">
           <h2 className="text-xl font-semibold">{title}</h2>

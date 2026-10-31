@@ -1,18 +1,15 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Bookmark, FileText, Plus, Trash2 } from "lucide-react-native";
+import { ArrowLeft, Bookmark, Plus, Trash2 } from "lucide-react-native";
 import Aftercare from "@/components/Aftercare";
 import { AudioPlayer, Button, ConfirmDialog, PageTitle, PageUnderline, toast, withAlpha } from "@/components/ui";
 import { ENERGY_LABELS, MODE_META, MOOD_LABELS } from "@/lib/content";
-import { fetchEntry, signedAudioUrl, useEntries, useSettings } from "@/lib/store";
-import { transcribeVoiceMemo } from "@/lib/advice";
+import { fetchEntry, signedAudioUrl, useEntries } from "@/lib/store";
 import type { Addendum, Entry } from "@/lib/types";
 import { useStyles, useTheme } from "@/theme/ThemeProvider";
 import type { FontSet } from "@/theme/tokens";
-
-const LONG_MEMO_SECONDS = 300;
 
 /**
  * Each format's pre-writing sliders ask their own question. This maps the exact
@@ -113,7 +110,6 @@ export default function EntryDetailScreen() {
   const { theme } = useTheme();
   const styles = useStyles(createStyles);
   const { entries, loading, removeEntry, restoreEntry, updateEntry, setKept } = useEntries();
-  const { settings } = useSettings();
   const stored = entries.find((e) => e.id === id);
   // An entry older than the loaded pages is fetched on its own. `fetched` holds
   // the answer for one id, including "there is no such entry" as a null entry,
@@ -125,8 +121,6 @@ export default function EntryDetailScreen() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioError, setAudioError] = useState(false);
   const [audioAttempt, setAudioAttempt] = useState(0);
-  const [transcribing, setTranscribing] = useState(false);
-  const [transcribeError, setTranscribeError] = useState<string | null>(null);
   const [showFull, setShowFull] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -203,7 +197,6 @@ export default function EntryDetailScreen() {
     );
   }
 
-  const isLong = (entry.audioSeconds ?? 0) > LONG_MEMO_SECONDS;
   const moodLabel = MOOD_LABELS[Math.min(Math.max(entry.mood, 1), MOOD_LABELS.length) - 1];
   const energyLabel = ENERGY_LABELS[Math.min(Math.max(entry.energy, 1), ENERGY_LABELS.length) - 1];
   const intent = intentLine(entry.intent);
@@ -237,25 +230,6 @@ export default function EntryDetailScreen() {
       setNoteError(err instanceof Error ? err.message : "That didn't save just now.");
     } finally {
       setNoteSaving(false);
-    }
-  };
-
-  const transcribe = async () => {
-    setTranscribing(true);
-    setTranscribeError(null);
-    try {
-      const result = await transcribeVoiceMemo(entry.id);
-      const transcribed: Partial<Entry> = {
-        transcript: result.transcript,
-        transcriptSummary: result.summary ?? undefined,
-        transcriptStatus: "done",
-      };
-      await updateEntry(entry.id, transcribed);
-      applyLocalPatch(transcribed);
-    } catch (err) {
-      setTranscribeError(err instanceof Error ? err.message : "That didn't work just now.");
-    } finally {
-      setTranscribing(false);
     }
   };
 
@@ -481,40 +455,11 @@ export default function EntryDetailScreen() {
                 <Text style={[styles.muted, { color: theme.colors.mutedForeground }]}>Loading the recording…</Text>
               )}
 
-              {!entry.transcript && settings.aiSuggestionsEnabled && (
-                <View>
-                  <Button
-                    variant="filled"
-                    label={transcribing ? "Sending it off…" : isLong ? "Read it instead (with a recap)" : "Read it instead"}
-                    onPress={transcribe}
-                    disabled={transcribing}
-                    icon={
-                      transcribing ? (
-                        <ActivityIndicator size="small" color={theme.colors.primaryForeground} />
-                      ) : (
-                        <FileText size={16} color={theme.colors.primaryForeground} strokeWidth={1.75} />
-                      )
-                    }
-                  />
-                  <Text style={[styles.noteHint, { color: theme.colors.mutedForeground }]}>
-                    {transcribing
-                      ? "It can take a minute or two to come back, longer for a longer recording. You can keep reading while you wait."
-                      : isLong
-                        ? "Over five minutes, so you'll get a short recap plus the full text."
-                        : "Turns this memo into text you can skim later."}
-                  </Text>
-                </View>
-              )}
-
-              {!entry.transcript && !settings.aiSuggestionsEnabled && (
+              {!entry.transcript && (
                 <Text style={[styles.muted, { color: theme.colors.mutedForeground }]}>
-                  Reading this back as text is off because it would send the recording to be transcribed. Turn AI
-                  suggestions back on in Settings to use it.
+                  This recording stays in your private journal account. Unravel does not send it to an AI or
+                  transcription service.
                 </Text>
-              )}
-
-              {transcribeError && (
-                <Text style={[styles.errorText, { color: theme.colors.destructive }]}>{transcribeError}</Text>
               )}
 
               {Boolean(entry.transcript) && (
